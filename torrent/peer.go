@@ -53,7 +53,7 @@ func FetchPeers(trackerUrl string, infoHash []byte, length int) ([]Peer, error) 
 
 	os.WriteFile("testdata/tmp.torrent", body, 0o600)
 
-	decoded, _, err := bencode.DecodeDict(string(body), 0)
+	decoded, err := bencode.Unmarshal(string(body))
 	if err != nil {
 		return nil, err
 	}
