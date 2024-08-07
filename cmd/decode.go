@@ -18,7 +18,7 @@ func decode() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			bencodedValue := args[0]
 
-			decoded, _, err := bencode.Decode(bencodedValue, 0)
+			decoded, err := bencode.Unmarshal(bencodedValue)
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)

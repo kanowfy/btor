@@ -44,7 +44,7 @@ func ParseFromFile(filename string) (*Torrent, error) {
 func (t *Torrent) InfoHash() ([]byte, error) {
 	var m map[string]interface{}
 	mapstructure.Decode(t.Info, &m)
-	infoBytes, err := bencode.EncodeDict(m)
+	infoBytes, err := bencode.Marshal(m)
 	if err != nil {
 		return nil, err
 	}
