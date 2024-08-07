@@ -10,7 +10,8 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-const ID = "10111213141516171819"
+// const ID = "10111213141516171819"
+const ID = "00112233445566778899"
 
 type Peer struct {
 	ID   string `mapstructure:"peer id"`
