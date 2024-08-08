@@ -44,7 +44,7 @@ func ParseFromFile(filename string) (*Torrent, error) {
 func (t *Torrent) InfoHash() ([]byte, error) {
 	var m map[string]interface{}
 	mapstructure.Decode(t.Info, &m)
-	infoBytes, err := bencode.EncodeDict(m)
+	infoBytes, err := bencode.Marshal(m)
 	if err != nil {
 		return nil, err
 	}
@@ -53,4 +53,21 @@ func (t *Torrent) InfoHash() ([]byte, error) {
 	infoHash.Write(infoBytes)
 
 	return infoHash.Sum(nil), nil
+}
+
+type PieceHash struct {
+	Index int
+	Hash  []byte
+}
+
+func (t *Torrent) PieceHashes() []PieceHash {
+	hashes := make([]PieceHash, len(t.Info.Pieces)/20)
+	for i := 0; i < len(t.Info.Pieces); i++ {
+		hashes = append(hashes, PieceHash{
+			Index: i,
+			Hash:  []byte(t.Info.Pieces[i*20 : (i+1)*20]),
+		})
+	}
+
+	return hashes
 }

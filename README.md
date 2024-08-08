@@ -10,6 +10,7 @@ Usage:
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
   decode      decodes the provided bencoded string to stdout
+  handshake   send a handshake message to the peer destination and print the replied peer ID in hexadecimal
   help        Help about any command
   info        print the information of the provided torrent file
   peers       fetch peers from tracker url and print to stard out

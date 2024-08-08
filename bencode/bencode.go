@@ -1,12 +1,16 @@
 package bencode
 
 import (
-	"bytes"
 	"fmt"
 	"slices"
 	"strconv"
 	"unicode"
 )
+
+func Unmarshal(bencode string) (interface{}, error) {
+	res, _, err := Decode(bencode, 0)
+	return res, err
+}
 
 func Decode(bencode string, pos int) (interface{}, int, error) {
 	switch {
@@ -112,48 +116,76 @@ func DecodeDict(bencode string, pos int) (map[string]interface{}, int, error) {
 	return dict, pos + 1, nil
 }
 
-// TODO: refactor encoding
-func EncodeDict(obj map[string]interface{}) ([]byte, error) {
-	var buf bytes.Buffer
-	buf.WriteByte('d')
+func Marshal(value any) ([]byte, error) {
+	return Encode(value, []byte{})
+}
 
-	// sort keys for deterministic map access
+// TODO: see if can use bytes.Buffer to read and write to the same object
+func Encode(value any, parts []byte) ([]byte, error) {
+	switch v := value.(type) {
+	case int:
+		return EncodeInteger(v, parts), nil
+	case string:
+		return EncodeString(v, parts), nil
+	case []interface{}:
+		return EncodeList(v, parts), nil
+	case map[string]interface{}:
+		return EncodeDict(v, parts), nil
+	default:
+		return nil, fmt.Errorf("invalid value: %v", v)
+	}
+}
+
+func EncodeInteger(num int, parts []byte) []byte {
+	parts = append(parts, 'i')
+	parts = append(parts, strconv.Itoa(num)...)
+	parts = append(parts, 'e')
+	return parts
+}
+
+func EncodeString(str string, parts []byte) []byte {
+	parts = append(parts, strconv.Itoa(len(str))...)
+	parts = append(parts, ':')
+	parts = append(parts, []byte(str)...)
+	return parts
+}
+
+func EncodeList(list []interface{}, parts []byte) []byte {
+	parts = append(parts, 'l')
+	for _, elem := range list {
+		res, err := Encode(elem, parts)
+		if err != nil {
+			return nil
+		}
+
+		parts = res
+	}
+
+	parts = append(parts, 'e')
+	return parts
+}
+
+func EncodeDict(dict map[string]interface{}, parts []byte) []byte {
+	parts = append(parts, 'd')
 	i := 0
-	keys := make([]string, len(obj))
-	for k := range obj {
+	keys := make([]string, len(dict))
+	for k := range dict {
 		keys[i] = k
 		i++
 	}
 	slices.Sort(keys)
 
 	for _, k := range keys {
-		l := strconv.Itoa(len(k))
-		buf.WriteString(l)
-		buf.WriteByte(':')
-		buf.WriteString(k)
+		parts = EncodeString(k, parts)
 
-		switch val := obj[k].(type) {
-		case string:
-			l := strconv.Itoa(len(val))
-			buf.WriteString(l)
-			buf.WriteByte(':')
-			buf.WriteString(val)
-		case int:
-			buf.WriteByte('i')
-			i := strconv.Itoa(val)
-			buf.WriteString(i)
-			buf.WriteByte('e')
-		case map[string]interface{}:
-			encoded, err := EncodeDict(val)
-			if err != nil {
-				return nil, err
-			}
-			buf.Write(encoded)
-		default:
-			return nil, fmt.Errorf("unsupported value: %v", val)
+		valPart, err := Encode(dict[k], parts)
+		if err != nil {
+			return nil
 		}
+
+		parts = valPart
 	}
 
-	buf.WriteByte('e')
-	return buf.Bytes(), nil
+	parts = append(parts, 'e')
+	return parts
 }

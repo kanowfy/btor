@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func decode() *cobra.Command {
+func decodeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "decode [bencoded string]",
 		Short: "decodes the provided bencoded string to stdout",
@@ -18,7 +18,7 @@ func decode() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			bencodedValue := args[0]
 
-			decoded, _, err := bencode.Decode(bencodedValue, 0)
+			decoded, err := bencode.Unmarshal(bencodedValue)
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
