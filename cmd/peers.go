@@ -1,14 +1,16 @@
 package cmd
 
 import (
+	"crypto/rand"
 	"fmt"
 	"os"
 
+	"github.com/kanowfy/btor/peers"
 	"github.com/kanowfy/btor/torrent"
 	"github.com/spf13/cobra"
 )
 
-func peers() *cobra.Command {
+func peersCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "peers [torrent file]",
 		Short: "fetch peers from tracker url and print to stard out",
@@ -27,13 +29,19 @@ func peers() *cobra.Command {
 				os.Exit(1)
 			}
 
-			peers, err := torrent.FetchPeers(t.Announce, infoHash, t.Info.Length)
+			var peerID [20]byte
+			if _, err = rand.Read(peerID[:]); err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+
+			peerList, err := peers.Fetch(t.Announce, infoHash, t.Info.Length, peerID[:])
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
 			}
 
-			for _, p := range peers {
+			for _, p := range peerList {
 				fmt.Printf("%s:%d\n", p.IP, p.Port)
 			}
 		},

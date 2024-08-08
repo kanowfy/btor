@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func info() *cobra.Command {
+func infoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "info [torrent file]",
 		Short: "print the information of the provided torrent file",
@@ -20,7 +20,6 @@ func info() *cobra.Command {
 				os.Exit(1)
 			}
 
-			// calculate info hash
 			infoHash, err := t.InfoHash()
 			if err != nil {
 				fmt.Println(err)
@@ -31,9 +30,10 @@ func info() *cobra.Command {
 			fmt.Printf("File Length: %d\n", t.Info.Length)
 			fmt.Printf("Info Hash: %x\n", infoHash)
 
+			pieceHashes := t.PieceHashes()
 			fmt.Println("Piece Hashes:")
-			for i := 0; i < len(t.Info.Pieces)/20; i++ {
-				fmt.Printf("%x\n", t.Info.Pieces[i*20:(i+1)*20])
+			for _, p := range pieceHashes {
+				fmt.Printf("%x\n", p.Hash)
 			}
 		},
 	}
