@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func decode() *cobra.Command {
+func decodeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "decode [bencoded string]",
 		Short: "decodes the provided bencoded string to stdout",

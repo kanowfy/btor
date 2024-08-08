@@ -1,4 +1,4 @@
-package torrent
+package handshake
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ type Handshake struct {
 	PeerID      []byte
 }
 
-func NewHandshake(infoHash []byte, peerID []byte) *Handshake {
+func New(infoHash []byte, peerID []byte) *Handshake {
 	return &Handshake{
 		ProtocolLen: byte(19),
 		Protocol:    []byte("BitTorrent protocol"),
@@ -35,24 +35,18 @@ func (h *Handshake) Serialize() []byte {
 	return buf.Bytes()
 }
 
-func DeserializeHandshake(msg []byte) (*Handshake, error) {
+func Deserialize(msg []byte) (*Handshake, error) {
 	if len(msg) != 68 {
 		return nil, fmt.Errorf("invalid handshake reply: %s", msg)
 	}
 
-	return NewHandshake(msg[28:48], msg[48:68]), nil
+	return New(msg[28:48], msg[48:68]), nil
 }
 
-func InitHandshake(addr *net.TCPAddr, infoHash []byte) (*Handshake, error) {
-	conn, err := net.DialTCP("tcp", nil, addr)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
+func InitHandshake(conn net.Conn, infoHash []byte, peerID []byte) (*Handshake, error) {
+	msg := New(infoHash, peerID)
 
-	msg := NewHandshake(infoHash, []byte(ID))
-
-	_, err = conn.Write(msg.Serialize())
+	_, err := conn.Write(msg.Serialize())
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +58,7 @@ func InitHandshake(addr *net.TCPAddr, infoHash []byte) (*Handshake, error) {
 		return nil, err
 	}
 
-	reply, err := DeserializeHandshake(buf[:n])
+	reply, err := Deserialize(buf[:n])
 	if err != nil {
 		return nil, err
 	}
