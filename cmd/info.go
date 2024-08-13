@@ -32,8 +32,8 @@ func infoCmd() *cobra.Command {
 
 			pieceHashes := t.PieceHashes()
 			fmt.Println("Piece Hashes:")
-			for _, p := range pieceHashes {
-				fmt.Printf("%x\n", p.Hash)
+			for _, h := range pieceHashes {
+				fmt.Printf("%x\n", h)
 			}
 		},
 	}
