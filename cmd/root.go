@@ -7,6 +7,6 @@ func Execute() {
 		Use: "btor",
 	}
 
-	root.AddCommand(decodeCmd(), infoCmd(), peersCmd(), handshakeCmd())
+	root.AddCommand(decodeCmd(), infoCmd(), peersCmd(), handshakeCmd(), downloadPieceCmd())
 	root.Execute()
 }
