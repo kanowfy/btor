@@ -14,7 +14,7 @@ import (
 func handshakeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "handshake [torrent file] <peer_ip>:<peer_port>",
-		Short: "send a handshake message to the peer destination and print the replied peer ID in hexadecimal",
+		Short: "perform handshake with a peer and print out the received peer id",
 		Args:  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			t, err := torrent.ParseFromFile(args[0])
