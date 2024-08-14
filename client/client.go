@@ -121,7 +121,7 @@ func readBitfield(r io.Reader) error {
 			continue
 		}
 
-		if msg.ID == message.Bitfield {
+		if msg.ID == message.MessageBitfield {
 			break
 		}
 	}
@@ -130,7 +130,7 @@ func readBitfield(r io.Reader) error {
 }
 
 func sendInterested(w io.Writer) error {
-	msg := message.New(message.Interested, nil)
+	msg := message.New(message.MessageInterested, nil)
 
 	_, err := w.Write(msg.Serialize())
 	return err
@@ -147,7 +147,7 @@ func readUnchoke(r io.Reader) error {
 			continue
 		}
 
-		if msg.ID == message.Unchoke {
+		if msg.ID == message.MessageUnchoke {
 			break
 		}
 	}
@@ -182,7 +182,7 @@ func readPiece(r io.Reader, pieceIndex int, pieceLength int) ([]byte, error) {
 			return nil, err
 		}
 
-		if msg.ID != message.Piece {
+		if msg.ID != message.MessagePiece {
 			continue
 		}
 

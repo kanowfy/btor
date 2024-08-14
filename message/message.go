@@ -9,15 +9,15 @@ import (
 type MessageID byte
 
 const (
-	Choke MessageID = iota
-	Unchoke
-	Interested
-	Uninterested
-	Have
-	Bitfield
-	Request
-	Piece
-	Cancel
+	MessageChoke MessageID = iota
+	MessageUnchoke
+	MessageInterested
+	MessageUninterested
+	MessageHave
+	MessageBitfield
+	MessageRequest
+	MessagePiece
+	MessageCancel
 )
 
 type Message struct {
@@ -67,23 +67,23 @@ func Read(r io.Reader) (*Message, error) {
 
 	switch msgBuf[0] {
 	case 0:
-		message.ID = Choke
+		message.ID = MessageChoke
 	case 1:
-		message.ID = Unchoke
+		message.ID = MessageUnchoke
 	case 2:
-		message.ID = Interested
+		message.ID = MessageInterested
 	case 3:
-		message.ID = Uninterested
+		message.ID = MessageUninterested
 	case 4:
-		message.ID = Have
+		message.ID = MessageHave
 	case 5:
-		message.ID = Bitfield
+		message.ID = MessageBitfield
 	case 6:
-		message.ID = Request
+		message.ID = MessageRequest
 	case 7:
-		message.ID = Piece
+		message.ID = MessagePiece
 	case 8:
-		message.ID = Cancel
+		message.ID = MessageCancel
 	default:
 		return nil, fmt.Errorf("invalid message.ID: %d", msgBuf[0])
 	}
@@ -99,7 +99,7 @@ func NewRequest(pieceIndex, blockOffset, blockLength int) *Message {
 	binary.BigEndian.PutUint32(payload[4:8], uint32(blockOffset))
 	binary.BigEndian.PutUint32(payload[8:12], uint32(blockLength))
 	return &Message{
-		ID:      Request,
+		ID:      MessageRequest,
 		Payload: payload,
 	}
 }
