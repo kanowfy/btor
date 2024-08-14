@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"time"
 
 	"github.com/kanowfy/btor/handshake"
 	"github.com/kanowfy/btor/message"
 	"github.com/kanowfy/btor/peers"
-	"github.com/kanowfy/btor/torrent"
 )
 
 const MaxBlockLen = 16384 // 2^14
@@ -23,6 +21,12 @@ type Client struct {
 	peer     peers.Peer
 	infoHash []byte
 	peerID   []byte
+}
+
+type PieceTask struct {
+	Index  int
+	Hash   []byte
+	Length int
 }
 
 // New establish tcp connection with a peer and complete the handshake
@@ -46,45 +50,7 @@ func New(peer peers.Peer, infoHash, peerID []byte) (*Client, error) {
 	}, nil
 }
 
-func DownloadOne(outFile string, torrentFile string, pieceIndex int, peerID []byte) error {
-	torrent, err := torrent.ParseFromFile(torrentFile)
-	if err != nil {
-		return err
-	}
-
-	infoHash, err := torrent.InfoHash()
-	if err != nil {
-		return err
-	}
-
-	peerList, err := peers.Fetch(torrent.Announce, infoHash, torrent.Info.Length, peerID)
-	if err != nil {
-		return err
-	}
-
-	pieceHashes := torrent.PieceHashes()
-
-	// test with peer 0, assuming every peer has all the work
-	peer := peerList[0]
-
-	client, err := New(peer, infoHash, peerID)
-	if err != nil {
-		return err
-	}
-
-	pieceLen := pieceLengthByIndex(pieceIndex, torrent.Info.PieceLength, torrent.Info.Length)
-
-	piece, err := client.downloadPiece(pieceIndex, pieceLen, pieceHashes[pieceIndex])
-
-	// write to dest
-	if err = os.WriteFile(outFile, piece, 0o660); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Client) downloadPiece(pieceIndex, pieceLen int, pieceHash []byte) ([]byte, error) {
+func (c *Client) DownloadPiece(pt PieceTask) ([]byte, error) {
 	log.Println("waiting for bitfield message")
 	// read bitfield
 	if err := c.readBitfield(); err != nil {
@@ -105,26 +71,26 @@ func (c *Client) downloadPiece(pieceIndex, pieceLen int, pieceHash []byte) ([]by
 
 	log.Println("sending request messages")
 	// send requests
-	if err := c.sendRequests(pieceIndex, pieceLen); err != nil {
+	if err := c.sendRequests(pt.Index, pt.Length); err != nil {
 		return nil, err
 	}
 
 	log.Println("reading piece messages")
 	// read piece
-	piece, err := c.readPiece(pieceIndex, pieceLen)
+	piece, err := c.readPiece(pt.Index, pt.Length)
 	if err != nil {
 		return nil, err
 	}
 
 	// check hash
-	if err = matchPieceHash(piece, pieceHash); err != nil {
+	if err = matchPieceHash(piece, pt.Hash); err != nil {
 		return nil, fmt.Errorf("invalid piece, mismatch piece hash")
 	}
 
 	return piece, nil
 }
 
-func pieceLengthByIndex(pieceIndex, maxPieceLen, fileLen int) int {
+func CalculatePieceLength(pieceIndex, maxPieceLen, fileLen int) int {
 	if fileLen/(pieceIndex+1) >= maxPieceLen {
 		return maxPieceLen
 	}

@@ -8,12 +8,13 @@ Usage:
   btor [command]
 
 Available Commands:
-  completion  Generate the autocompletion script for the specified shell
-  decode      decodes the provided bencoded string to stdout
-  handshake   send a handshake message to the peer destination and print the replied peer ID in hexadecimal
-  help        Help about any command
-  info        print the information of the provided torrent file
-  peers       fetch peers from tracker url and print to stard out
+  completion     Generate the autocompletion script for the specified shell
+  decode         decodes the provided bencoded string to stdout
+  download_piece download and save a piece
+  handshake      perform handshake with a peer and print out the received peer id
+  help           Help about any command
+  info           print the information of the provided torrent file
+  peers          fetch peers from tracker url and print to stard out
 
 Flags:
   -h, --help   help for btor
