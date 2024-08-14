@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"github.com/kanowfy/btor/handshake"
 	"github.com/kanowfy/btor/message"
@@ -15,7 +15,36 @@ import (
 	"github.com/kanowfy/btor/torrent"
 )
 
-const MaxBlockLen = 16384
+const MaxBlockLen = 16384 // 2^14
+
+// Client holds a connection with a peer
+type Client struct {
+	conn     net.Conn
+	peer     peers.Peer
+	infoHash []byte
+	peerID   []byte
+}
+
+// New establish tcp connection with a peer and complete the handshake
+func New(peer peers.Peer, infoHash, peerID []byte) (*Client, error) {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", peer.IP, peer.Port), 3*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = handshake.InitHandshake(conn, infoHash, peerID)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	return &Client{
+		conn,
+		peer,
+		infoHash,
+		peerID,
+	}, nil
+}
 
 func DownloadOne(outFile string, torrentFile string, pieceIndex int, peerID []byte) error {
 	torrent, err := torrent.ParseFromFile(torrentFile)
@@ -35,12 +64,17 @@ func DownloadOne(outFile string, torrentFile string, pieceIndex int, peerID []by
 
 	pieceHashes := torrent.PieceHashes()
 
-	// test with peer 0
+	// test with peer 0, assuming every peer has all the work
 	peer := peerList[0]
+
+	client, err := New(peer, infoHash, peerID)
+	if err != nil {
+		return err
+	}
 
 	pieceLen := pieceLengthByIndex(pieceIndex, torrent.Info.PieceLength, torrent.Info.Length)
 
-	piece, err := downloadPiece(pieceIndex, pieceLen, pieceHashes[pieceIndex], peer, infoHash, peerID)
+	piece, err := client.downloadPiece(pieceIndex, pieceLen, pieceHashes[pieceIndex])
 
 	// write to dest
 	if err = os.WriteFile(outFile, piece, 0o660); err != nil {
@@ -50,45 +84,34 @@ func DownloadOne(outFile string, torrentFile string, pieceIndex int, peerID []by
 	return nil
 }
 
-func downloadPiece(pieceIndex, pieceLen int, pieceHash []byte, peer peers.Peer, infoHash, peerID []byte) ([]byte, error) {
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", peer.IP, peer.Port))
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	log.Println("initiating handshake")
-	if _, err = handshake.InitHandshake(conn, infoHash, peerID); err != nil {
-		return nil, err
-	}
-
+func (c *Client) downloadPiece(pieceIndex, pieceLen int, pieceHash []byte) ([]byte, error) {
 	log.Println("waiting for bitfield message")
 	// read bitfield
-	if err = readBitfield(conn); err != nil {
+	if err := c.readBitfield(); err != nil {
 		return nil, err
 	}
 
 	log.Println("sending interested message")
 	// send interested
-	if err = sendInterested(conn); err != nil {
+	if err := c.sendInterested(); err != nil {
 		return nil, err
 	}
 
 	log.Println("waiting for unchoke message")
 	// read unchoke
-	if err = readUnchoke(conn); err != nil {
+	if err := c.readUnchoke(); err != nil {
 		return nil, err
 	}
 
 	log.Println("sending request messages")
 	// send requests
-	if err = sendRequests(conn, pieceIndex, pieceLen); err != nil {
+	if err := c.sendRequests(pieceIndex, pieceLen); err != nil {
 		return nil, err
 	}
 
 	log.Println("reading piece messages")
 	// read piece
-	piece, err := readPiece(conn, pieceIndex, pieceLen)
+	piece, err := c.readPiece(pieceIndex, pieceLen)
 	if err != nil {
 		return nil, err
 	}
@@ -109,9 +132,9 @@ func pieceLengthByIndex(pieceIndex, maxPieceLen, fileLen int) int {
 	return fileLen % maxPieceLen
 }
 
-func readBitfield(r io.Reader) error {
+func (c *Client) readBitfield() error {
 	for {
-		msg, err := message.Read(r)
+		msg, err := message.Read(c.conn)
 		if err != nil {
 			return err
 		}
@@ -129,16 +152,16 @@ func readBitfield(r io.Reader) error {
 	return nil
 }
 
-func sendInterested(w io.Writer) error {
+func (c *Client) sendInterested() error {
 	msg := message.New(message.MessageInterested, nil)
 
-	_, err := w.Write(msg.Serialize())
+	_, err := c.conn.Write(msg.Serialize())
 	return err
 }
 
-func readUnchoke(r io.Reader) error {
+func (c *Client) readUnchoke() error {
 	for {
-		msg, err := message.Read(r)
+		msg, err := message.Read(c.conn)
 		if err != nil {
 			return err
 		}
@@ -154,7 +177,7 @@ func readUnchoke(r io.Reader) error {
 	return nil
 }
 
-func sendRequests(w io.Writer, pieceIndex int, pieceLength int) error {
+func (c *Client) sendRequests(pieceIndex, pieceLength int) error {
 	var lengthSent int
 
 	for lengthSent < pieceLength {
@@ -163,7 +186,7 @@ func sendRequests(w io.Writer, pieceIndex int, pieceLength int) error {
 			blockLen = pieceLength - lengthSent
 		}
 		msg := message.NewRequest(pieceIndex, lengthSent, blockLen)
-		_, err := w.Write(msg.Serialize())
+		_, err := c.conn.Write(msg.Serialize())
 		if err != nil {
 			return err
 		}
@@ -173,11 +196,11 @@ func sendRequests(w io.Writer, pieceIndex int, pieceLength int) error {
 	return nil
 }
 
-func readPiece(r io.Reader, pieceIndex int, pieceLength int) ([]byte, error) {
+func (c *Client) readPiece(pieceIndex, pieceLength int) ([]byte, error) {
 	buf := make([]byte, pieceLength)
 	var lengthRead int
 	for {
-		msg, err := message.Read(r)
+		msg, err := message.Read(c.conn)
 		if err != nil {
 			return nil, err
 		}
