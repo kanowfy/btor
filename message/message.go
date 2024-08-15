@@ -32,6 +32,7 @@ func New(id MessageID, payload []byte) *Message {
 	}
 }
 
+// Serialize encodes the message into byte slice suitable for sending through the wire
 func (m *Message) Serialize() []byte {
 	length := 5 + len(m.Payload)
 	buf := make([]byte, length)
@@ -93,18 +94,20 @@ func Read(r io.Reader) (*Message, error) {
 	return message, nil
 }
 
+// NewRequest creates a new Request message for a given piece block
 func NewRequest(pieceIndex, blockOffset, blockLength int) *Message {
 	payload := make([]byte, 12)
 	binary.BigEndian.PutUint32(payload[0:4], uint32(pieceIndex))
 	binary.BigEndian.PutUint32(payload[4:8], uint32(blockOffset))
 	binary.BigEndian.PutUint32(payload[8:12], uint32(blockLength))
-	return &Message{
-		ID:      MessageRequest,
-		Payload: payload,
-	}
+	return New(MessageRequest, payload)
 }
 
+// ParsePiece parses a Piece message and copies the data to the to the appropriate block offset in the buffer and returns the length of copied data
 func ParsePiece(msg *Message, buf []byte, pieceIndex int) (int, error) {
+	if msg.ID != MessagePiece {
+		return 0, fmt.Errorf("message must be of type %d, got %d", MessagePiece, msg.ID)
+	}
 	index := int(binary.BigEndian.Uint32(msg.Payload[0:4]))
 	if index != pieceIndex {
 		return 0, fmt.Errorf("unexpected piece index, want %d, got %d", pieceIndex, index)
@@ -112,6 +115,9 @@ func ParsePiece(msg *Message, buf []byte, pieceIndex int) (int, error) {
 
 	begin := int(binary.BigEndian.Uint32(msg.Payload[4:8]))
 	data := msg.Payload[8:]
+	if begin+len(data) > len(buf) {
+		return 0, fmt.Errorf("block too large")
+	}
 	copy(buf[begin:], data)
 	return len(data), nil
 }
