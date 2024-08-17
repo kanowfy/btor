@@ -16,7 +16,13 @@ func peersCmd() *cobra.Command {
 		Short: "fetch peers from tracker url and print to stard out",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			m, err := metainfo.ParseFromFile(args[0])
+			f, err := os.Open(args[0])
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			defer f.Close()
+			m, err := metainfo.Parse(f)
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)

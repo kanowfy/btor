@@ -14,7 +14,13 @@ func infoCmd() *cobra.Command {
 		Short: "print the information of the provided torrent file",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			m, err := metainfo.ParseFromFile(args[0])
+			f, err := os.Open(args[0])
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			defer f.Close()
+			m, err := metainfo.Parse(f)
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)

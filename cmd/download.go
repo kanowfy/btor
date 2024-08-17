@@ -49,7 +49,12 @@ func downloadPieceCmd() *cobra.Command {
 }
 
 func downloadPiece(outFile string, torrentFile string, pieceIndex int, peerID []byte) error {
-	mi, err := metainfo.ParseFromFile(torrentFile)
+	f, err := os.Open(torrentFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	mi, err := metainfo.Parse(f)
 	if err != nil {
 		return err
 	}

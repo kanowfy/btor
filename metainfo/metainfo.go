@@ -3,33 +3,33 @@ package metainfo
 import (
 	"crypto/sha1"
 	"fmt"
-	"os"
+	"io"
 
 	"github.com/kanowfy/btor/bencode"
 	"github.com/mitchellh/mapstructure"
 )
 
-type Metainfo struct {
-	Announce string `mapstructure:"announce"`
-	Info     struct {
-		Length      int    `mapstructure:"length"`
-		Name        string `mapstructure:"name"`
-		PieceLength int    `mapstructure:"piece length"`
-		Pieces      string `mapstructure:"pieces"`
-	} `mapstructure:"info"`
+type Info struct {
+	Length      int    `mapstructure:"length"`
+	Name        string `mapstructure:"name"`
+	PieceLength int    `mapstructure:"piece length"`
+	Pieces      string `mapstructure:"pieces"`
 }
 
-func ParseFromFile(filename string) (*Metainfo, error) {
-	data, err := os.ReadFile(filename)
+type Metainfo struct {
+	Announce string `mapstructure:"announce"`
+	Info     Info   `mapstructure:"info"`
+}
+
+func Parse(r io.Reader) (*Metainfo, error) {
+	data, err := io.ReadAll(r)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return nil, err
 	}
 
 	decoded, _, err := bencode.DecodeDict(string(data), 0)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return nil, err
 	}
 
 	m := &Metainfo{}

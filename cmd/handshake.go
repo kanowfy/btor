@@ -17,7 +17,13 @@ func handshakeCmd() *cobra.Command {
 		Short: "perform handshake with a peer and print out the received peer id",
 		Args:  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			m, err := metainfo.ParseFromFile(args[0])
+			f, err := os.Open(args[0])
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			defer f.Close()
+			m, err := metainfo.Parse(f)
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
