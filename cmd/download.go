@@ -7,8 +7,8 @@ import (
 	"strconv"
 
 	"github.com/kanowfy/btor/client"
+	"github.com/kanowfy/btor/metainfo"
 	"github.com/kanowfy/btor/peers"
-	"github.com/kanowfy/btor/torrent"
 	"github.com/spf13/cobra"
 )
 
@@ -49,22 +49,22 @@ func downloadPieceCmd() *cobra.Command {
 }
 
 func downloadPiece(outFile string, torrentFile string, pieceIndex int, peerID []byte) error {
-	torrent, err := torrent.ParseFromFile(torrentFile)
+	mi, err := metainfo.ParseFromFile(torrentFile)
 	if err != nil {
 		return err
 	}
 
-	infoHash, err := torrent.InfoHash()
+	infoHash, err := mi.InfoHash()
 	if err != nil {
 		return err
 	}
 
-	peerList, err := peers.Fetch(torrent.Announce, infoHash, torrent.Info.Length, peerID)
+	peerList, err := peers.Fetch(mi.Announce, infoHash, mi.Info.Length, peerID)
 	if err != nil {
 		return err
 	}
 
-	pieceHashes := torrent.PieceHashes()
+	pieceHashes := mi.PieceHashes()
 
 	// test with peer 0, assuming every peer has all the work
 	peer := peerList[0]
@@ -77,7 +77,7 @@ func downloadPiece(outFile string, torrentFile string, pieceIndex int, peerID []
 	pieceTask := client.PieceTask{
 		Index:  pieceIndex,
 		Hash:   pieceHashes[pieceIndex],
-		Length: client.CalculatePieceLength(pieceIndex, torrent.Info.PieceLength, torrent.Info.Length),
+		Length: client.CalculatePieceLength(pieceIndex, mi.Info.PieceLength, mi.Info.Length),
 	}
 
 	piece, err := c.DownloadPiece(pieceTask)

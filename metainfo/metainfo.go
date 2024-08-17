@@ -1,4 +1,4 @@
-package torrent
+package metainfo
 
 import (
 	"crypto/sha1"
@@ -9,7 +9,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-type Torrent struct {
+type Metainfo struct {
 	Announce string `mapstructure:"announce"`
 	Info     struct {
 		Length      int    `mapstructure:"length"`
@@ -19,7 +19,7 @@ type Torrent struct {
 	} `mapstructure:"info"`
 }
 
-func ParseFromFile(filename string) (*Torrent, error) {
+func ParseFromFile(filename string) (*Metainfo, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Println(err)
@@ -32,18 +32,18 @@ func ParseFromFile(filename string) (*Torrent, error) {
 		os.Exit(1)
 	}
 
-	t := &Torrent{}
+	m := &Metainfo{}
 
-	if err = mapstructure.Decode(decoded, &t); err != nil {
+	if err = mapstructure.Decode(decoded, &m); err != nil {
 		return nil, err
 	}
 
-	return t, nil
+	return m, nil
 }
 
-func (t *Torrent) InfoHash() ([]byte, error) {
-	var m map[string]interface{}
-	if err := mapstructure.Decode(t.Info, &m); err != nil {
+func (m *Metainfo) InfoHash() ([]byte, error) {
+	var mp map[string]interface{}
+	if err := mapstructure.Decode(m.Info, &mp); err != nil {
 		return nil, fmt.Errorf("error decoding info to map: %v", err)
 	}
 	infoBytes, err := bencode.Marshal(m)
@@ -57,11 +57,11 @@ func (t *Torrent) InfoHash() ([]byte, error) {
 	return infoHash.Sum(nil), nil
 }
 
-func (t *Torrent) PieceHashes() [][]byte {
-	numPiece := len(t.Info.Pieces) / 20
+func (m *Metainfo) PieceHashes() [][]byte {
+	numPiece := len(m.Info.Pieces) / 20
 	hashes := make([][]byte, numPiece)
 	for i := 0; i < numPiece; i++ {
-		hashes[i] = []byte(t.Info.Pieces[i*20 : (i+1)*20])
+		hashes[i] = []byte(m.Info.Pieces[i*20 : (i+1)*20])
 	}
 
 	return hashes

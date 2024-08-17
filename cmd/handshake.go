@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/kanowfy/btor/handshake"
-	"github.com/kanowfy/btor/torrent"
+	"github.com/kanowfy/btor/metainfo"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +17,7 @@ func handshakeCmd() *cobra.Command {
 		Short: "perform handshake with a peer and print out the received peer id",
 		Args:  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			t, err := torrent.ParseFromFile(args[0])
+			m, err := metainfo.ParseFromFile(args[0])
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
@@ -28,7 +28,7 @@ func handshakeCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			infoHash, err := t.InfoHash()
+			infoHash, err := m.InfoHash()
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
