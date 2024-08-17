@@ -18,27 +18,25 @@ func downloadPieceCmd() *cobra.Command {
 		Use:   "download_piece -o OUT_FILE TORRENT_FILE PIECE_INDEX",
 		Short: "download and save a piece",
 		Args:  cobra.MinimumNArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			torrentfile := args[0]
 
 			pieceIndex, err := strconv.Atoi(args[1])
 			if err != nil {
-				fmt.Printf("invalid piece index: %s", args[0])
-				os.Exit(1)
+				return fmt.Errorf("invalid piece index: %v", err)
 			}
 
 			var peerID [20]byte
 			if _, err = rand.Read(peerID[:]); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 
 			if err = downloadPiece(outfile, torrentfile, pieceIndex, peerID[:]); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 
 			fmt.Printf("Piece %d downloaded to %s\n", pieceIndex, outfile)
+			return nil
 		},
 	}
 

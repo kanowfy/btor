@@ -13,23 +13,20 @@ func infoCmd() *cobra.Command {
 		Use:   "info [torrent file]",
 		Short: "print the information of the provided torrent file",
 		Args:  cobra.MinimumNArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := os.Open(args[0])
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 			defer f.Close()
 			m, err := metainfo.Parse(f)
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 
 			infoHash, err := m.InfoHash()
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 
 			fmt.Printf("Tracker URL: %s\n", m.Announce)
@@ -41,6 +38,8 @@ func infoCmd() *cobra.Command {
 			for _, h := range pieceHashes {
 				fmt.Printf("%x\n", h)
 			}
+
+			return nil
 		},
 	}
 }

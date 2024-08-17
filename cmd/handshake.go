@@ -16,43 +16,34 @@ func handshakeCmd() *cobra.Command {
 		Use:   "handshake [torrent file] <peer_ip>:<peer_port>",
 		Short: "perform handshake with a peer and print out the received peer id",
 		Args:  cobra.MinimumNArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := os.Open(args[0])
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 			defer f.Close()
 			m, err := metainfo.Parse(f)
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 
 			infoHash, err := m.InfoHash()
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 
 			var peerID [20]byte
 			if _, err = rand.Read(peerID[:]); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 
 			reply, err := getHandshakeMessage(args[1], infoHash, peerID[:])
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return err
 			}
 
 			fmt.Printf("Peer ID: %x\n", reply.PeerID)
+			return nil
 		},
 	}
 }
