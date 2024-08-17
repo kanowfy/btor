@@ -21,13 +21,14 @@ type Metainfo struct {
 	Info     Info   `mapstructure:"info"`
 }
 
+// Parse parses a stream into Metainfo
 func Parse(r io.Reader) (*Metainfo, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
 
-	decoded, _, err := bencode.DecodeDict(string(data), 0)
+	decoded, err := bencode.Unmarshal(string(data))
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +42,7 @@ func Parse(r io.Reader) (*Metainfo, error) {
 	return m, nil
 }
 
+// Infohash returns the hash/checksum of the Info dictionary in a Metainfo
 func (m *Metainfo) InfoHash() ([]byte, error) {
 	var mp map[string]interface{}
 	if err := mapstructure.Decode(m.Info, &mp); err != nil {
@@ -57,6 +59,7 @@ func (m *Metainfo) InfoHash() ([]byte, error) {
 	return infoHash.Sum(nil), nil
 }
 
+// PieceHashes returns a hash slice of pieces in a file
 func (m *Metainfo) PieceHashes() [][]byte {
 	numPiece := len(m.Info.Pieces) / 20
 	hashes := make([][]byte, numPiece)

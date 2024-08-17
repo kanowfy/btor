@@ -50,6 +50,7 @@ func New(peer peers.Peer, infoHash, peerID []byte) (*Client, error) {
 	}, nil
 }
 
+// DownloadPiece attempts to download a piece in a blocking manner
 func (c *Client) DownloadPiece(pt PieceTask) ([]byte, error) {
 	log.Println("waiting for bitfield message")
 	// read bitfield

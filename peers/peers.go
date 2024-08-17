@@ -21,6 +21,7 @@ type trackerResponse struct {
 	Peers    []Peer `mapstructure:"peers"`
 }
 
+// Fetch sends a GET request to a tracker endpoint, parses the response and returns the peers
 func Fetch(trackerUrl string, infoHash []byte, length int, peerID []byte) ([]Peer, error) {
 	req, err := http.NewRequest(http.MethodGet, trackerUrl, nil)
 	if err != nil {
@@ -35,7 +36,7 @@ func Fetch(trackerUrl string, infoHash []byte, length int, peerID []byte) ([]Pee
 	q.Add("uploaded", "0")
 	q.Add("downloaded", "0")
 	q.Add("left", strconv.Itoa(length))
-	q.Add("compact", "0")
+	q.Add("compact", "0") // TODO: change to compact peers representation
 
 	req.URL.RawQuery = q.Encode()
 
