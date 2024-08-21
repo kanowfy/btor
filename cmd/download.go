@@ -84,6 +84,9 @@ func downloadPiece(outFile string, torrentFile string, pieceIndex int, peerID []
 	}
 
 	piece, err := c.DownloadPiece(pieceTask)
+	if err != nil {
+		return err
+	}
 
 	// write to dest
 	if err = os.WriteFile(outFile, piece, 0o660); err != nil {
