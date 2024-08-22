@@ -48,7 +48,7 @@ func (m *Metainfo) InfoHash() ([]byte, error) {
 	if err := mapstructure.Decode(m.Info, &mp); err != nil {
 		return nil, fmt.Errorf("error decoding info to map: %v", err)
 	}
-	infoBytes, err := bencode.Marshal(m)
+	infoBytes, err := bencode.Marshal(mp)
 	if err != nil {
 		return nil, err
 	}
