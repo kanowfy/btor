@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"time"
 
@@ -21,6 +21,7 @@ type Client struct {
 	peer     peers.Peer
 	infoHash []byte
 	peerID   []byte
+	logger   *slog.Logger
 }
 
 type PieceTask struct {
@@ -30,15 +31,27 @@ type PieceTask struct {
 }
 
 // New establish tcp connection with a peer and complete the handshake
-func New(peer peers.Peer, infoHash, peerID []byte) (*Client, error) {
+func New(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte) (*Client, error) {
+	logger = logger.With(slog.String("peer_addr", fmt.Sprintf("%s:%d", peer.IP, peer.Port)))
+
+	logger.Info("establishing connection with peer")
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", peer.IP, peer.Port), 3*time.Second)
 	if err != nil {
+		logger.Error("failed to establish connection with peer", "error", err)
 		return nil, err
 	}
 
+	logger.Info("performing handshake with peer")
 	_, err = handshake.InitHandshake(conn, infoHash, peerID)
 	if err != nil {
+		logger.Error("failed to complete handshake with peer", "error", err)
 		conn.Close()
+		return nil, err
+	}
+
+	// TODO: handle bitfield payload
+	if _, err := readBitfield(conn); err != nil {
+		logger.Error("failed to read bitfield message from peer", "error", err)
 		return nil, err
 	}
 
@@ -47,44 +60,85 @@ func New(peer peers.Peer, infoHash, peerID []byte) (*Client, error) {
 		peer,
 		infoHash,
 		peerID,
+		logger,
 	}, nil
+}
+
+func (c *Client) DownloadFile(tasks []PieceTask) ([]byte, error) {
+	var resBuf bytes.Buffer
+	// send interested
+	if err := c.sendInterested(); err != nil {
+		c.logger.Error("failed to send interested message to peer", "error", err)
+		return nil, err
+	}
+
+	// read unchoke
+	if err := c.readUnchoke(); err != nil {
+		c.logger.Error("failed to read unchoke message from peer", "error", err)
+		return nil, err
+	}
+
+	for _, pt := range tasks {
+		c.logger.Info("requesting piece", slog.Int("piece index", pt.Index))
+		// send requests
+		if err := c.sendRequests(pt.Index, pt.Length); err != nil {
+			c.logger.Error("failed to send requests message to peer", "error", err)
+			return nil, err
+		}
+
+		c.logger.Info("downloading piece", slog.Int("piece index", pt.Index))
+		// read piece
+		piece, err := c.readPiece(pt.Index, pt.Length)
+		if err != nil {
+			c.logger.Error("failed to read piece message from peer", "error", err)
+			return nil, err
+		}
+		// check hash
+		if err := matchPieceHash(piece, pt.Hash); err != nil {
+			c.logger.Error("failed to validate piece hash", "error", err)
+			return nil, fmt.Errorf("invalid piece, mismatch piece hash")
+		}
+
+		if _, err := resBuf.Write(piece); err != nil {
+			c.logger.Error("failed to write piece data to buffer", "error", err)
+			return nil, err
+		}
+		c.logger.Info("piece downloaded", slog.Int("piece index", pt.Index))
+	}
+
+	return resBuf.Bytes(), nil
 }
 
 // DownloadPiece attempts to download a piece in a blocking manner
 func (c *Client) DownloadPiece(pt PieceTask) ([]byte, error) {
-	log.Println("waiting for bitfield message")
-	// read bitfield
-	if err := c.readBitfield(); err != nil {
-		return nil, err
-	}
-
-	log.Println("sending interested message")
 	// send interested
 	if err := c.sendInterested(); err != nil {
+		c.logger.Error("failed to send interested message to peer", "error", err)
 		return nil, err
 	}
 
-	log.Println("waiting for unchoke message")
 	// read unchoke
 	if err := c.readUnchoke(); err != nil {
+		c.logger.Error("failed to read unchoke message from peer", "error", err)
 		return nil, err
 	}
 
-	log.Println("sending request messages")
 	// send requests
 	if err := c.sendRequests(pt.Index, pt.Length); err != nil {
+		c.logger.Error("failed to send requests message to peer", "error", err)
 		return nil, err
 	}
 
-	log.Println("reading piece messages")
 	// read piece
 	piece, err := c.readPiece(pt.Index, pt.Length)
 	if err != nil {
+		c.logger.Error("failed to read piece message from peer", "error", err)
 		return nil, err
 	}
 
 	// check hash
 	if err = matchPieceHash(piece, pt.Hash); err != nil {
+		c.logger.Error("failed to validate piece hash", "error", err)
 		return nil, fmt.Errorf("invalid piece, mismatch piece hash")
 	}
 
@@ -99,24 +153,21 @@ func CalculatePieceLength(pieceIndex, maxPieceLen, fileLen int) int {
 	return fileLen % maxPieceLen
 }
 
-func (c *Client) readBitfield() error {
-	for {
-		msg, err := message.Read(c.conn)
-		if err != nil {
-			return err
-		}
-
-		// skipping keep-alive message
-		if msg == nil {
-			continue
-		}
-
-		if msg.ID == message.MessageBitfield {
-			break
-		}
+func readBitfield(conn net.Conn) (*message.Message, error) {
+	msg, err := message.Read(conn)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	if msg == nil {
+		return nil, fmt.Errorf("expected bitfield message but got nothing")
+	}
+
+	if msg.ID != message.MessageBitfield {
+		return nil, fmt.Errorf("expected bitfield message but got message with ID %d", msg.ID)
+	}
+
+	return msg, nil
 }
 
 func (c *Client) sendInterested() error {
@@ -127,19 +178,17 @@ func (c *Client) sendInterested() error {
 }
 
 func (c *Client) readUnchoke() error {
-	for {
-		msg, err := message.Read(c.conn)
-		if err != nil {
-			return err
-		}
+	msg, err := message.Read(c.conn)
+	if err != nil {
+		return err
+	}
 
-		if msg == nil {
-			continue
-		}
+	if msg == nil {
+		return fmt.Errorf("expected unchoke message but got nothing")
+	}
 
-		if msg.ID == message.MessageUnchoke {
-			break
-		}
+	if msg.ID != message.MessageUnchoke {
+		return fmt.Errorf("expected unchoke message but got message with ID %d", msg.ID)
 	}
 	return nil
 }
