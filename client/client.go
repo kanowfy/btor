@@ -21,6 +21,7 @@ type Client struct {
 	peer     peers.Peer
 	infoHash []byte
 	peerID   []byte
+	bitfield message.Bitfield
 	logger   *slog.Logger
 }
 
@@ -49,17 +50,20 @@ func New(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte) (*Client
 		return nil, err
 	}
 
-	// TODO: handle bitfield payload
-	if _, err := readBitfield(conn); err != nil {
+	msg, err := readBitfield(conn)
+	if err != nil {
 		logger.Error("failed to read bitfield message from peer", "error", err)
 		return nil, err
 	}
+
+	bitfield := message.Bitfield(msg.Payload)
 
 	return &Client{
 		conn,
 		peer,
 		infoHash,
 		peerID,
+		bitfield,
 		logger,
 	}, nil
 }
