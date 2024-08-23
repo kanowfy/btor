@@ -31,6 +31,11 @@ type PieceTask struct {
 	Length int
 }
 
+type PieceResult struct {
+	PieceTask
+	Data []byte
+}
+
 // New establish tcp connection with a peer and complete the handshake
 func New(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte) (*Client, error) {
 	logger = logger.With(slog.String("peer_addr", fmt.Sprintf("%s:%d", peer.IP, peer.Port)))
@@ -68,26 +73,36 @@ func New(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte) (*Client
 	}, nil
 }
 
-func (c *Client) DownloadFile(tasks []PieceTask) ([]byte, error) {
-	var resBuf bytes.Buffer
+func AttemptDownload(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte, taskStream chan PieceTask, resultStream chan<- PieceResult) {
+	c, err := New(logger, peer, infoHash, peerID)
+	if err != nil {
+		return
+	}
 	// send interested
 	if err := c.sendInterested(); err != nil {
 		c.logger.Error("failed to send interested message to peer", "error", err)
-		return nil, err
+		return
 	}
 
 	// read unchoke
 	if err := c.readUnchoke(); err != nil {
 		c.logger.Error("failed to read unchoke message from peer", "error", err)
-		return nil, err
+		return
 	}
 
-	for _, pt := range tasks {
+	for pt := range taskStream {
+		if !c.bitfield.HasPiece(pt.Index) {
+			// put task back to queue
+			taskStream <- pt
+			continue
+		}
+
 		c.logger.Info("requesting piece", slog.Int("piece index", pt.Index))
 		// send requests
 		if err := c.sendRequests(pt.Index, pt.Length); err != nil {
 			c.logger.Error("failed to send requests message to peer", "error", err)
-			return nil, err
+			taskStream <- pt
+			return
 		}
 
 		c.logger.Info("downloading piece", slog.Int("piece index", pt.Index))
@@ -95,22 +110,23 @@ func (c *Client) DownloadFile(tasks []PieceTask) ([]byte, error) {
 		piece, err := c.readPiece(pt.Index, pt.Length)
 		if err != nil {
 			c.logger.Error("failed to read piece message from peer", "error", err)
-			return nil, err
+			taskStream <- pt
+			continue
 		}
+
 		// check hash
 		if err := matchPieceHash(piece, pt.Hash); err != nil {
 			c.logger.Error("failed to validate piece hash", "error", err)
-			return nil, fmt.Errorf("invalid piece, mismatch piece hash")
+			taskStream <- pt
+			continue
 		}
 
-		if _, err := resBuf.Write(piece); err != nil {
-			c.logger.Error("failed to write piece data to buffer", "error", err)
-			return nil, err
-		}
 		c.logger.Info("piece downloaded", slog.Int("piece index", pt.Index))
+		resultStream <- PieceResult{
+			PieceTask: pt,
+			Data:      piece,
+		}
 	}
-
-	return resBuf.Bytes(), nil
 }
 
 // DownloadPiece attempts to download a piece in a blocking manner

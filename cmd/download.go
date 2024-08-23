@@ -10,6 +10,7 @@ import (
 	"github.com/kanowfy/btor/client"
 	"github.com/kanowfy/btor/metainfo"
 	"github.com/kanowfy/btor/peers"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -66,34 +67,41 @@ func downloadFile(outFile, torrentFile string, peerID []byte) error {
 
 	pieceHashes := mi.PieceHashes()
 
-	// test with peer 0, assuming every peer has all the work
-	peer := peerList[0]
-
 	logger := slog.Default().With(slog.Group(
 		"metainfo", slog.String("file_name", mi.Info.Name), slog.Int("file_size", mi.Info.Length),
 	))
 
-	c, err := client.New(logger, peer, infoHash, peerID)
-	if err != nil {
-		return err
+	taskStream := make(chan client.PieceTask, len(pieceHashes)) // put buffer to unblock
+	resultStream := make(chan client.PieceResult)
+	for _, peer := range peerList {
+		go client.AttemptDownload(logger, peer, infoHash, peerID, taskStream, resultStream)
 	}
 
-	tasks := make([]client.PieceTask, len(pieceHashes))
-	for i := 0; i < len(tasks); i++ {
-		tasks[i] = client.PieceTask{
+	for i := 0; i < len(pieceHashes); i++ {
+		taskStream <- client.PieceTask{
 			Index:  i,
 			Hash:   pieceHashes[i],
 			Length: client.CalculatePieceLength(i, mi.Info.PieceLength, mi.Info.Length),
 		}
 	}
 
-	res, err := c.DownloadFile(tasks)
-	if err != nil {
-		return err
+	resultBuf := make([]byte, mi.Info.Length)
+	bar := progressbar.DefaultBytes(int64(mi.Info.Length), "downloading")
+
+	var numResult int
+	for numResult < len(pieceHashes) {
+		res := <-resultStream
+		numResult++
+
+		start := mi.Info.PieceLength * res.Index
+		end := start + res.Length
+		copy(resultBuf[start:end], res.Data)
+		bar.Write(res.Data)
 	}
+	close(taskStream)
 
 	// write to dest
-	if err = os.WriteFile(outFile, res, 0o660); err != nil {
+	if err = os.WriteFile(outFile, resultBuf, 0o660); err != nil {
 		return err
 	}
 
