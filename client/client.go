@@ -2,7 +2,6 @@ package client
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha1"
 	"fmt"
 	"log/slog"
@@ -22,6 +21,7 @@ type Client struct {
 	peer     peers.Peer
 	infoHash []byte
 	peerID   []byte
+	logger   *slog.Logger
 }
 
 type PieceTask struct {
@@ -31,23 +31,27 @@ type PieceTask struct {
 }
 
 // New establish tcp connection with a peer and complete the handshake
-func New(ctx context.Context, peer peers.Peer, infoHash, peerID []byte) (*Client, error) {
+func New(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte) (*Client, error) {
+	logger = logger.With(slog.String("peer_addr", fmt.Sprintf("%s:%d", peer.IP, peer.Port)))
+
+	logger.Info("establishing connection with peer")
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", peer.IP, peer.Port), 3*time.Second)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to establish connection with peer", "error", err)
+		logger.Error("failed to establish connection with peer", "error", err)
 		return nil, err
 	}
 
+	logger.Info("performing handshake with peer")
 	_, err = handshake.InitHandshake(conn, infoHash, peerID)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to complete handshake with peer", "error", err)
+		logger.Error("failed to complete handshake with peer", "error", err)
 		conn.Close()
 		return nil, err
 	}
 
 	// TODO: handle bitfield payload
 	if _, err := readBitfield(conn); err != nil {
-		slog.ErrorContext(ctx, "failed to read bitfield message from peer", "error", err)
+		logger.Error("failed to read bitfield message from peer", "error", err)
 		return nil, err
 	}
 
@@ -56,83 +60,85 @@ func New(ctx context.Context, peer peers.Peer, infoHash, peerID []byte) (*Client
 		peer,
 		infoHash,
 		peerID,
+		logger,
 	}, nil
 }
 
-func (c *Client) DownloadFile(ctx context.Context, tasks []PieceTask) ([]byte, error) {
+func (c *Client) DownloadFile(tasks []PieceTask) ([]byte, error) {
 	var resBuf bytes.Buffer
 	// send interested
 	if err := c.sendInterested(); err != nil {
-		slog.ErrorContext(ctx, "failed to send interested message to peer", "error", err)
+		c.logger.Error("failed to send interested message to peer", "error", err)
 		return nil, err
 	}
 
 	// read unchoke
 	if err := c.readUnchoke(); err != nil {
-		slog.ErrorContext(ctx, "failed to read unchoke message from peer", "error", err)
+		c.logger.Error("failed to read unchoke message from peer", "error", err)
 		return nil, err
 	}
 
 	for _, pt := range tasks {
-		slog.InfoContext(ctx, "downloading piece", slog.Int("piece index", pt.Index))
+		c.logger.Info("requesting piece", slog.Int("piece index", pt.Index))
 		// send requests
 		if err := c.sendRequests(pt.Index, pt.Length); err != nil {
-			slog.ErrorContext(ctx, "failed to send requests message to peer", "error", err)
+			c.logger.Error("failed to send requests message to peer", "error", err)
 			return nil, err
 		}
 
+		c.logger.Info("downloading piece", slog.Int("piece index", pt.Index))
 		// read piece
 		piece, err := c.readPiece(pt.Index, pt.Length)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to read piece message from peer", "error", err)
+			c.logger.Error("failed to read piece message from peer", "error", err)
 			return nil, err
 		}
 		// check hash
 		if err := matchPieceHash(piece, pt.Hash); err != nil {
-			slog.ErrorContext(ctx, "failed to validate piece hash", "error", err)
+			c.logger.Error("failed to validate piece hash", "error", err)
 			return nil, fmt.Errorf("invalid piece, mismatch piece hash")
 		}
 
 		if _, err := resBuf.Write(piece); err != nil {
-			slog.ErrorContext(ctx, "failed to write piece data to buffer", "error", err)
+			c.logger.Error("failed to write piece data to buffer", "error", err)
 			return nil, err
 		}
-		slog.InfoContext(ctx, "piece downloaded", slog.Int("piece index", pt.Index))
+		c.logger.Info("piece downloaded", slog.Int("piece index", pt.Index))
 	}
 
 	return resBuf.Bytes(), nil
 }
 
 // DownloadPiece attempts to download a piece in a blocking manner
-func (c *Client) DownloadPiece(ctx context.Context, pt PieceTask) ([]byte, error) {
+func (c *Client) DownloadPiece(pt PieceTask) ([]byte, error) {
 	// send interested
 	if err := c.sendInterested(); err != nil {
-		slog.ErrorContext(ctx, "failed to send interested message to peer", "error", err)
+		c.logger.Error("failed to send interested message to peer", "error", err)
 		return nil, err
 	}
 
 	// read unchoke
 	if err := c.readUnchoke(); err != nil {
-		slog.ErrorContext(ctx, "failed to read unchoke message from peer", "error", err)
+		c.logger.Error("failed to read unchoke message from peer", "error", err)
 		return nil, err
 	}
 
 	// send requests
 	if err := c.sendRequests(pt.Index, pt.Length); err != nil {
-		slog.ErrorContext(ctx, "failed to send requests message to peer", "error", err)
+		c.logger.Error("failed to send requests message to peer", "error", err)
 		return nil, err
 	}
 
 	// read piece
 	piece, err := c.readPiece(pt.Index, pt.Length)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to read piece message from peer", "error", err)
+		c.logger.Error("failed to read piece message from peer", "error", err)
 		return nil, err
 	}
 
 	// check hash
 	if err = matchPieceHash(piece, pt.Hash); err != nil {
-		slog.ErrorContext(ctx, "failed to validate piece hash", "error", err)
+		c.logger.Error("failed to validate piece hash", "error", err)
 		return nil, fmt.Errorf("invalid piece, mismatch piece hash")
 	}
 

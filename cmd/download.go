@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"context"
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 
@@ -69,9 +69,11 @@ func downloadFile(outFile, torrentFile string, peerID []byte) error {
 	// test with peer 0, assuming every peer has all the work
 	peer := peerList[0]
 
-	ctx := context.WithValue(context.Background(), "peer", fmt.Sprintf("%s:%d", peer.IP, peer.Port))
+	logger := slog.Default().With(slog.Group(
+		"metainfo", slog.String("file_name", mi.Info.Name), slog.Int("file_size", mi.Info.Length),
+	))
 
-	c, err := client.New(ctx, peer, infoHash, peerID)
+	c, err := client.New(logger, peer, infoHash, peerID)
 	if err != nil {
 		return err
 	}
@@ -85,7 +87,7 @@ func downloadFile(outFile, torrentFile string, peerID []byte) error {
 		}
 	}
 
-	res, err := c.DownloadFile(ctx, tasks)
+	res, err := c.DownloadFile(tasks)
 	if err != nil {
 		return err
 	}
@@ -158,9 +160,11 @@ func downloadPiece(outFile string, torrentFile string, pieceIndex int, peerID []
 	// test with peer 0, assuming every peer has all the work
 	peer := peerList[0]
 
-	ctx := context.WithValue(context.Background(), "peer", fmt.Sprintf("%s:%d", peer.IP, peer.Port))
+	logger := slog.Default().With(slog.Group(
+		"metainfo", slog.String("file_name", mi.Info.Name), slog.Int("file_size", mi.Info.Length),
+	))
 
-	c, err := client.New(ctx, peer, infoHash, peerID)
+	c, err := client.New(logger, peer, infoHash, peerID)
 	if err != nil {
 		return err
 	}
@@ -171,7 +175,7 @@ func downloadPiece(outFile string, torrentFile string, pieceIndex int, peerID []
 		Length: client.CalculatePieceLength(pieceIndex, mi.Info.PieceLength, mi.Info.Length),
 	}
 
-	piece, err := c.DownloadPiece(ctx, pieceTask)
+	piece, err := c.DownloadPiece(pieceTask)
 	if err != nil {
 		return err
 	}
