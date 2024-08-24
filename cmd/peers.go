@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"os"
 
@@ -21,25 +22,32 @@ func peersCmd() *cobra.Command {
 				return err
 			}
 			defer f.Close()
+
 			m, err := metainfo.Parse(f)
 			if err != nil {
-				return err
+				if errors.Is(err, metainfo.ErrUnsupportedProtocol) {
+					fmt.Println("protocol not supported")
+				} else {
+					fmt.Printf("could not read metainfo file: %v\n", err)
+				}
+				os.Exit(1)
 			}
 
-			// calculate info hash
 			infoHash, err := m.InfoHash()
 			if err != nil {
-				return err
+				fmt.Printf("failed to read info hash for metainfo file: %v\n", err)
+				os.Exit(1)
 			}
 
 			var peerID [20]byte
 			if _, err = rand.Read(peerID[:]); err != nil {
-				return err
+				panic(err)
 			}
 
 			peerList, err := peers.Fetch(m.Announce, infoHash, m.Info.Length, peerID[:])
 			if err != nil {
-				return err
+				fmt.Printf("failed to fetch peers: %v\n", err)
+				os.Exit(1)
 			}
 
 			for _, p := range peerList {

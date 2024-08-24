@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -22,24 +23,32 @@ func handshakeCmd() *cobra.Command {
 				return err
 			}
 			defer f.Close()
+
 			m, err := metainfo.Parse(f)
 			if err != nil {
-				return err
+				if errors.Is(err, metainfo.ErrUnsupportedProtocol) {
+					fmt.Println("protocol not supported")
+				} else {
+					fmt.Printf("could not read metainfo file: %v\n", err)
+				}
+				os.Exit(1)
 			}
 
 			infoHash, err := m.InfoHash()
 			if err != nil {
-				return err
+				fmt.Printf("failed to read info hash for metainfo file: %v\n", err)
+				os.Exit(1)
 			}
 
 			var peerID [20]byte
 			if _, err = rand.Read(peerID[:]); err != nil {
-				return err
+				panic(err)
 			}
 
 			reply, err := getHandshakeMessage(args[1], infoHash, peerID[:])
 			if err != nil {
-				return err
+				fmt.Printf("could not exchange handshake: %v\n", err)
+				os.Exit(1)
 			}
 
 			fmt.Printf("Peer ID: %x\n", reply.PeerID)

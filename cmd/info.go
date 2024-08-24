@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -18,15 +19,22 @@ func infoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			defer f.Close()
 			m, err := metainfo.Parse(f)
 			if err != nil {
-				return err
+				if errors.Is(err, metainfo.ErrUnsupportedProtocol) {
+					fmt.Println("protocol not supported")
+				} else {
+					fmt.Printf("could not read metainfo file: %v\n", err)
+				}
+				os.Exit(1)
 			}
 
 			infoHash, err := m.InfoHash()
 			if err != nil {
-				return err
+				fmt.Printf("failed to read info hash for metainfo file: %v\n", err)
+				os.Exit(1)
 			}
 
 			fmt.Printf("Tracker URL: %s\n", m.Announce)

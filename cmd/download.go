@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -17,23 +18,27 @@ func downloadFileCmd() *cobra.Command {
 	var outfile string
 	cmd := &cobra.Command{
 		Use:   "download -o OUT_FILE TORRENT_FILE",
-		Short: "download and save a file",
+		Short: "download and save file from a .torrent file",
 		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			torrentfile := args[0]
 
 			var peerID [20]byte
 			if _, err := rand.Read(peerID[:]); err != nil {
-				return err
+				panic(err)
 			}
 
-			if err := downloadFile(outfile, torrentfile, peerID[:]); err != nil {
-				return err
+			err := downloadFile(outfile, torrentfile, peerID[:])
+			if err != nil {
+				if errors.Is(err, metainfo.ErrUnsupportedProtocol) {
+					fmt.Println("protocol not supported")
+				} else {
+					fmt.Printf("failed to download: %v\n", err)
+				}
+				os.Exit(1)
 			}
 
-			fmt.Printf("Downloaded %s to %s\n", torrentfile, outfile)
-
-			return nil
+			fmt.Printf("\nDownloaded %s to %s\n", torrentfile, outfile)
 		},
 	}
 
@@ -87,6 +92,7 @@ func downloadFile(outFile, torrentFile string, peerID []byte) error {
 	resultBuf := make([]byte, mi.Info.Length)
 	bar := progressbar.DefaultBytes(int64(mi.Info.Length), "downloading")
 
+	// keep reading from resultStream until enough pieces are collected
 	var numResult int
 	for numResult < len(pieceHashes) {
 		res := <-resultStream

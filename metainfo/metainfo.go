@@ -2,11 +2,16 @@ package metainfo
 
 import (
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/kanowfy/btor/bencode"
 	"github.com/mitchellh/mapstructure"
+)
+
+var (
+	ErrUnsupportedProtocol = errors.New("unsupported protocol")
 )
 
 type Info struct {
@@ -37,6 +42,10 @@ func Parse(r io.Reader) (*Metainfo, error) {
 
 	if err = mapstructure.Decode(decoded, &m); err != nil {
 		return nil, err
+	}
+
+	if len(m.Announce) == 0 {
+		return nil, ErrUnsupportedProtocol
 	}
 
 	return m, nil
