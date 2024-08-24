@@ -14,7 +14,7 @@ func Execute() {
 		Use: "btor",
 	}
 
-	root.AddCommand(decodeCmd(), infoCmd(), peersCmd(), handshakeCmd(), downloadPieceCmd(), downloadFileCmd())
+	root.AddCommand(decodeCmd(), infoCmd(), peersCmd(), handshakeCmd(), downloadFileCmd())
 
 	var verbose bool
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {

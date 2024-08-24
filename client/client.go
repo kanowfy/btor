@@ -76,6 +76,7 @@ func New(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte) (*Client
 func AttemptDownload(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte, taskStream chan PieceTask, resultStream chan<- PieceResult) {
 	c, err := New(logger, peer, infoHash, peerID)
 	if err != nil {
+		logger.Error(err.Error())
 		return
 	}
 	// send interested
@@ -127,42 +128,6 @@ func AttemptDownload(logger *slog.Logger, peer peers.Peer, infoHash, peerID []by
 			Data:      piece,
 		}
 	}
-}
-
-// DownloadPiece attempts to download a piece in a blocking manner
-func (c *Client) DownloadPiece(pt PieceTask) ([]byte, error) {
-	// send interested
-	if err := c.sendInterested(); err != nil {
-		c.logger.Error("failed to send interested message to peer", "error", err)
-		return nil, err
-	}
-
-	// read unchoke
-	if err := c.readUnchoke(); err != nil {
-		c.logger.Error("failed to read unchoke message from peer", "error", err)
-		return nil, err
-	}
-
-	// send requests
-	if err := c.sendRequests(pt.Index, pt.Length); err != nil {
-		c.logger.Error("failed to send requests message to peer", "error", err)
-		return nil, err
-	}
-
-	// read piece
-	piece, err := c.readPiece(pt.Index, pt.Length)
-	if err != nil {
-		c.logger.Error("failed to read piece message from peer", "error", err)
-		return nil, err
-	}
-
-	// check hash
-	if err = matchPieceHash(piece, pt.Hash); err != nil {
-		c.logger.Error("failed to validate piece hash", "error", err)
-		return nil, fmt.Errorf("invalid piece, mismatch piece hash")
-	}
-
-	return piece, nil
 }
 
 func CalculatePieceLength(pieceIndex, maxPieceLen, fileLen int) int {
