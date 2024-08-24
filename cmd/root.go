@@ -27,6 +27,9 @@ func Execute() {
 
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "whether to send logs to stdout")
 
+	root.Example = `Download from example.torrent file in home directory and save to example.txt file in the Download directory
+
+	$ btor download ~/examplefile.torrent -o ~/Downloads/example.txt`
 	root.Execute()
 }
 

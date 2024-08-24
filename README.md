@@ -3,7 +3,7 @@ btor is a command line BitTorrent client
 
 ## Usage
 
-```bash
+```
 $ btor --help
 
 Usage:
