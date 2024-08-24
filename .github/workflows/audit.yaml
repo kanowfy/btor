@@ -1,0 +1,38 @@
+name: Audit
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.21', '1.22', '1.23']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: verify dependencies
+        run: go mod verify
+
+      - name: run go vet
+        run: go vet ./...
+
+      - name: run staticcheck linter
+        uses: dominikh/staticcheck-action@v1.2.0
+        with:
+          version: "2024.1.1"
+          install-go: false
+          cache-key: ${{ matrix.go-version }}
+
+      - name: run tests
+        run: go test -race -vet=off ./...

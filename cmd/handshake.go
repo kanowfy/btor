@@ -2,51 +2,57 @@ package cmd
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 
 	"github.com/kanowfy/btor/handshake"
-	"github.com/kanowfy/btor/torrent"
+	"github.com/kanowfy/btor/metainfo"
 	"github.com/spf13/cobra"
 )
 
 func handshakeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "handshake [torrent file] <peer_ip>:<peer_port>",
-		Short: "send a handshake message to the peer destination and print the replied peer ID in hexadecimal",
+		Short: "perform handshake with a peer and print out the received peer id",
 		Args:  cobra.MinimumNArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
-			t, err := torrent.ParseFromFile(args[0])
+		RunE: func(cmd *cobra.Command, args []string) error {
+			f, err := os.Open(args[0])
 			if err != nil {
-				fmt.Println(err)
+				return err
+			}
+			defer f.Close()
+
+			m, err := metainfo.Parse(f)
+			if err != nil {
+				if errors.Is(err, metainfo.ErrUnsupportedProtocol) {
+					fmt.Println("protocol not supported")
+				} else {
+					fmt.Printf("could not read metainfo file: %v\n", err)
+				}
 				os.Exit(1)
 			}
 
+			infoHash, err := m.InfoHash()
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-
-			infoHash, err := t.InfoHash()
-			if err != nil {
-				fmt.Println(err)
+				fmt.Printf("failed to read info hash for metainfo file: %v\n", err)
 				os.Exit(1)
 			}
 
 			var peerID [20]byte
 			if _, err = rand.Read(peerID[:]); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				panic(err)
 			}
 
 			reply, err := getHandshakeMessage(args[1], infoHash, peerID[:])
 			if err != nil {
-				fmt.Println(err)
+				fmt.Printf("could not exchange handshake: %v\n", err)
 				os.Exit(1)
 			}
 
 			fmt.Printf("Peer ID: %x\n", reply.PeerID)
+			return nil
 		},
 	}
 }

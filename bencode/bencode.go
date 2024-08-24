@@ -8,26 +8,26 @@ import (
 )
 
 func Unmarshal(bencode string) (interface{}, error) {
-	res, _, err := Decode(bencode, 0)
+	res, _, err := decode(bencode, 0)
 	return res, err
 }
 
-func Decode(bencode string, pos int) (interface{}, int, error) {
+func decode(bencode string, pos int) (interface{}, int, error) {
 	switch {
 	case unicode.IsDigit(rune(bencode[pos])):
-		return DecodeString(bencode, pos)
+		return decodeString(bencode, pos)
 	case bencode[pos] == 'i':
-		return DecodeInteger(bencode, pos)
+		return decodeInteger(bencode, pos)
 	case bencode[pos] == 'l':
-		return DecodeList(bencode, pos)
+		return decodeList(bencode, pos)
 	case bencode[pos] == 'd':
-		return DecodeDict(bencode, pos)
+		return decodeDict(bencode, pos)
 	default:
 		return nil, 0, fmt.Errorf("invalid character at pos %d", pos)
 	}
 }
 
-func DecodeString(bencode string, pos int) (string, int, error) {
+func decodeString(bencode string, pos int) (string, int, error) {
 	var colonIndex int
 
 	for i := pos; i < len(bencode); i++ {
@@ -53,7 +53,7 @@ func DecodeString(bencode string, pos int) (string, int, error) {
 	return result, colonIndex + 1 + length, nil
 }
 
-func DecodeInteger(bencode string, pos int) (int, int, error) {
+func decodeInteger(bencode string, pos int) (int, int, error) {
 	pos += 1
 	var end int
 
@@ -78,12 +78,12 @@ func DecodeInteger(bencode string, pos int) (int, int, error) {
 	return value, end + 1, nil
 }
 
-func DecodeList(bencode string, pos int) ([]interface{}, int, error) {
+func decodeList(bencode string, pos int) ([]interface{}, int, error) {
 	pos += 1
 	list := make([]interface{}, 0)
 
 	for pos < len(bencode) && bencode[pos] != 'e' {
-		decoded, newPos, err := Decode(bencode, pos)
+		decoded, newPos, err := decode(bencode, pos)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -94,18 +94,18 @@ func DecodeList(bencode string, pos int) ([]interface{}, int, error) {
 	return list, pos + 1, nil
 }
 
-func DecodeDict(bencode string, pos int) (map[string]interface{}, int, error) {
+func decodeDict(bencode string, pos int) (map[string]interface{}, int, error) {
 	pos += 1
 	dict := make(map[string]interface{})
 
 	for pos < len(bencode) && bencode[pos] != 'e' {
-		key, posKey, err := DecodeString(bencode, pos)
+		key, posKey, err := decodeString(bencode, pos)
 		if err != nil {
 			return nil, 0, err
 		}
 
 		pos = posKey
-		val, posVal, err := Decode(bencode, pos)
+		val, posVal, err := decode(bencode, pos)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -117,43 +117,43 @@ func DecodeDict(bencode string, pos int) (map[string]interface{}, int, error) {
 }
 
 func Marshal(value any) ([]byte, error) {
-	return Encode(value, []byte{})
+	return encode(value, []byte{})
 }
 
 // TODO: see if can use bytes.Buffer to read and write to the same object
-func Encode(value any, parts []byte) ([]byte, error) {
+func encode(value any, parts []byte) ([]byte, error) {
 	switch v := value.(type) {
 	case int:
-		return EncodeInteger(v, parts), nil
+		return encodeInteger(v, parts), nil
 	case string:
-		return EncodeString(v, parts), nil
+		return encodeString(v, parts), nil
 	case []interface{}:
-		return EncodeList(v, parts), nil
+		return encodeList(v, parts), nil
 	case map[string]interface{}:
-		return EncodeDict(v, parts), nil
+		return encodeDict(v, parts), nil
 	default:
 		return nil, fmt.Errorf("invalid value: %v", v)
 	}
 }
 
-func EncodeInteger(num int, parts []byte) []byte {
+func encodeInteger(num int, parts []byte) []byte {
 	parts = append(parts, 'i')
 	parts = append(parts, strconv.Itoa(num)...)
 	parts = append(parts, 'e')
 	return parts
 }
 
-func EncodeString(str string, parts []byte) []byte {
+func encodeString(str string, parts []byte) []byte {
 	parts = append(parts, strconv.Itoa(len(str))...)
 	parts = append(parts, ':')
 	parts = append(parts, []byte(str)...)
 	return parts
 }
 
-func EncodeList(list []interface{}, parts []byte) []byte {
+func encodeList(list []interface{}, parts []byte) []byte {
 	parts = append(parts, 'l')
 	for _, elem := range list {
-		res, err := Encode(elem, parts)
+		res, err := encode(elem, parts)
 		if err != nil {
 			return nil
 		}
@@ -165,7 +165,7 @@ func EncodeList(list []interface{}, parts []byte) []byte {
 	return parts
 }
 
-func EncodeDict(dict map[string]interface{}, parts []byte) []byte {
+func encodeDict(dict map[string]interface{}, parts []byte) []byte {
 	parts = append(parts, 'd')
 	i := 0
 	keys := make([]string, len(dict))
@@ -176,9 +176,9 @@ func EncodeDict(dict map[string]interface{}, parts []byte) []byte {
 	slices.Sort(keys)
 
 	for _, k := range keys {
-		parts = EncodeString(k, parts)
+		parts = encodeString(k, parts)
 
-		valPart, err := Encode(dict[k], parts)
+		valPart, err := encode(dict[k], parts)
 		if err != nil {
 			return nil
 		}

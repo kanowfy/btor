@@ -20,7 +20,7 @@ func decodeCmd() *cobra.Command {
 
 			decoded, err := bencode.Unmarshal(bencodedValue)
 			if err != nil {
-				fmt.Println(err)
+				fmt.Printf("invalid bencoded string: %q\n", bencodedValue)
 				os.Exit(1)
 			}
 			jsonOutput, _ := json.Marshal(decoded)
