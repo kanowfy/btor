@@ -103,6 +103,13 @@ func NewRequest(pieceIndex, blockOffset, blockLength int) *Message {
 	return New(MessageRequest, payload)
 }
 
+// NewRequest creates a new Have message for a given piece index
+func NewHave(index int) *Message {
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload, uint32(index))
+	return New(MessageHave, payload)
+}
+
 // ParsePiece parses a Piece message and copies the data to the to the appropriate block offset in the buffer and returns the length of copied data
 func ParsePiece(msg *Message, buf []byte, pieceIndex int) (int, error) {
 	if msg.ID != MessagePiece {
@@ -120,4 +127,17 @@ func ParsePiece(msg *Message, buf []byte, pieceIndex int) (int, error) {
 	}
 	copy(buf[begin:], data)
 	return len(data), nil
+}
+
+// ParseHave parses a message of type Have and returns the piece index contained in the message payload
+func ParseHave(msg *Message) (int, error) {
+	if msg.ID != MessageHave {
+		return 0, fmt.Errorf("message must be of type %d, got %d", MessageHave, msg.ID)
+	}
+
+	if len(msg.Payload) != 4 {
+		return 0, fmt.Errorf("expected 4 byte payload, got %d", len(msg.Payload))
+	}
+
+	return int(binary.BigEndian.Uint32(msg.Payload)), nil
 }

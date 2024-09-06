@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/kanowfy/btor/metainfo"
 	"github.com/spf13/cobra"
@@ -31,21 +32,30 @@ func infoCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			infoHash, err := m.InfoHash()
-			if err != nil {
-				fmt.Printf("failed to read info hash for metainfo file: %v\n", err)
-				os.Exit(1)
+			fmt.Printf("• Name: %s\n", m.Info.Name)
+			fmt.Printf("• Tracker URL: %s\n", m.Announce)
+			if !m.Multifile {
+				fmt.Printf("• File Length: %d\n", m.Info.Length)
+			} else {
+				var size int
+				for _, f := range m.Info.Files {
+					size += f.Length
+				}
+				fmt.Printf("• Total Files/Size: %d files/%dB\n", len(m.Info.Files), size)
+				fmt.Println("• Files:")
+				for i := range len(m.Info.Files) {
+					fmt.Printf("%d. %s/%s\n", i+1, m.Info.Name, strings.Join(m.Info.Files[i].Path, "/"))
+				}
 			}
+			/*
+				fmt.Printf("Info Hash: %x\n", m.InfoHash)
 
-			fmt.Printf("Tracker URL: %s\n", m.Announce)
-			fmt.Printf("File Length: %d\n", m.Info.Length)
-			fmt.Printf("Info Hash: %x\n", infoHash)
-
-			pieceHashes := m.PieceHashes()
-			fmt.Println("Piece Hashes:")
-			for _, h := range pieceHashes {
-				fmt.Printf("%x\n", h)
-			}
+				pieceHashes := m.PieceHashes()
+				fmt.Println("Piece Hashes:")
+				for _, h := range pieceHashes {
+					fmt.Printf("%x\n", h)
+				}
+			*/
 
 			return nil
 		},

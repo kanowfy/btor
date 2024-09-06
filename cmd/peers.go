@@ -33,18 +33,12 @@ func peersCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			infoHash, err := m.InfoHash()
-			if err != nil {
-				fmt.Printf("failed to read info hash for metainfo file: %v\n", err)
-				os.Exit(1)
-			}
-
 			var peerID [20]byte
 			if _, err = rand.Read(peerID[:]); err != nil {
 				panic(err)
 			}
 
-			peerList, err := peers.Fetch(m.Announce, infoHash, m.Info.Length, peerID[:])
+			peerList, err := peers.Fetch(m.Announce, m.InfoHash, m.Info.Length, peerID[:])
 			if err != nil {
 				fmt.Printf("failed to fetch peers: %v\n", err)
 				os.Exit(1)

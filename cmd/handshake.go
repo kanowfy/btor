@@ -34,18 +34,12 @@ func handshakeCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			infoHash, err := m.InfoHash()
-			if err != nil {
-				fmt.Printf("failed to read info hash for metainfo file: %v\n", err)
-				os.Exit(1)
-			}
-
 			var peerID [20]byte
 			if _, err = rand.Read(peerID[:]); err != nil {
 				panic(err)
 			}
 
-			reply, err := getHandshakeMessage(args[1], infoHash, peerID[:])
+			reply, err := getHandshakeMessage(args[1], m.InfoHash, peerID[:])
 			if err != nil {
 				fmt.Printf("could not exchange handshake: %v\n", err)
 				os.Exit(1)

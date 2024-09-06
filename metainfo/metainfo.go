@@ -3,10 +3,9 @@ package metainfo
 import (
 	"crypto/sha1"
 	"errors"
-	"fmt"
 	"io"
 
-	"github.com/kanowfy/btor/bencode"
+	"github.com/jackpal/bencode-go"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -15,57 +14,62 @@ var (
 )
 
 type Info struct {
-	Length      int    `mapstructure:"length"`
-	Name        string `mapstructure:"name"`
-	PieceLength int    `mapstructure:"piece length"`
-	Pieces      string `mapstructure:"pieces"`
+	Length      int         `mapstructure:"length"`
+	Files       []FileEntry `mapstructure:"files"`
+	Name        string      `mapstructure:"name"`
+	PieceLength int         `mapstructure:"piece length"`
+	Pieces      string      `mapstructure:"pieces"`
+}
+
+type FileEntry struct {
+	Length int      `mapstructure:"length"`
+	Path   []string `mapstructure:"path"`
 }
 
 type Metainfo struct {
-	Announce string `mapstructure:"announce"`
-	Info     Info   `mapstructure:"info"`
+	Announce  string `mapstructure:"announce"`
+	Info      Info   `mapstructure:"info"`
+	InfoHash  []byte
+	Multifile bool
 }
 
 // Parse parses a stream into Metainfo
 func Parse(r io.Reader) (*Metainfo, error) {
-	data, err := io.ReadAll(r)
+	decoded, err := bencode.Decode(r)
 	if err != nil {
 		return nil, err
 	}
 
-	decoded, err := bencode.Unmarshal(string(data))
-	if err != nil {
+	mi := &Metainfo{}
+
+	if err = mapstructure.Decode(decoded, &mi); err != nil {
 		return nil, err
 	}
 
-	m := &Metainfo{}
+	if len(mi.Announce) == 0 {
+		return nil, ErrUnsupportedProtocol
+	}
 
+	// calculate infohash
+	m := make(map[string]interface{})
 	if err = mapstructure.Decode(decoded, &m); err != nil {
 		return nil, err
 	}
 
-	if len(m.Announce) == 0 {
-		return nil, ErrUnsupportedProtocol
-	}
-
-	return m, nil
-}
-
-// Infohash returns the hash/checksum of the Info dictionary in a Metainfo
-func (m *Metainfo) InfoHash() ([]byte, error) {
-	var mp map[string]interface{}
-	if err := mapstructure.Decode(m.Info, &mp); err != nil {
-		return nil, fmt.Errorf("error decoding info to map: %v", err)
-	}
-	infoBytes, err := bencode.Marshal(mp)
-	if err != nil {
+	infoHash := sha1.New()
+	if err = bencode.Marshal(infoHash, m["info"]); err != nil {
 		return nil, err
 	}
 
-	var infoHash = sha1.New()
-	infoHash.Write(infoBytes)
+	mi.InfoHash = infoHash.Sum(nil)
+	if mi.Info.Files != nil {
+		mi.Multifile = true
+		for _, file := range mi.Info.Files {
+			mi.Info.Length += file.Length
+		}
+	}
 
-	return infoHash.Sum(nil), nil
+	return mi, nil
 }
 
 // PieceHashes returns a hash slice of pieces in a file

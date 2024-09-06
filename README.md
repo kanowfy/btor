@@ -13,14 +13,9 @@ Grab a torrent file from the Internet, let's say it's in `~/Downloads/example.to
 # File will be saved to ~/example.txt
 btor download ~/Downloads/example.torrent -o ~/example.txt
 ```
-To view logs, either specify `-v` flag:
+View logs in `$HOME/.local/share/btor/btor.log`:
 ```shell
-# Long form of the flag --verbose can also be used
-btor download ~/Downloads/example.torrent -o ~/example.txt -v
-```
-Or check the logs in `$HOME/.local/share/btor/btor.log`:
-```shell
-cat $HOME/.local/share/btor/btor.log | less
+tail -f $HOME/.local/share/btor/btor.log
 ```
 For more commands and usage, use the -h flag:
 ```shell
@@ -31,9 +26,13 @@ btor -h
 btor peers -h
 ```
 
-### Current limitations
-- Only support HTTP trackers
-- Only support single-file torrents
+### Support
+- Download from torrent file
+- HTTP trackers
+- Single file and multifile torrent
+
+### Limitations
+- Does not support UDP tracker and DHT
 
 ## License
 [MIT LICENSE](LICENSE)
