@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/kanowfy/btor/client"
 	"github.com/kanowfy/btor/metainfo"
@@ -59,12 +60,7 @@ func downloadFile(outFile, torrentFile string, peerID []byte) error {
 		return err
 	}
 
-	infoHash, err := mi.InfoHash()
-	if err != nil {
-		return err
-	}
-
-	peerList, err := peers.Fetch(mi.Announce, infoHash, mi.Info.Length, peerID)
+	peerList, err := peers.Fetch(mi.Announce, mi.InfoHash, mi.Info.Length, peerID)
 	if err != nil {
 		return err
 	}
@@ -78,7 +74,7 @@ func downloadFile(outFile, torrentFile string, peerID []byte) error {
 	taskStream := make(chan client.PieceTask, len(pieceHashes)) // put buffer to unblock
 	resultStream := make(chan client.PieceResult)
 	for _, peer := range peerList {
-		go client.AttemptDownload(logger, peer, infoHash, peerID, taskStream, resultStream)
+		go client.StartDownloadClient(logger, peer, mi.InfoHash, peerID, taskStream, resultStream)
 	}
 
 	for i := 0; i < len(pieceHashes); i++ {
@@ -106,8 +102,27 @@ func downloadFile(outFile, torrentFile string, peerID []byte) error {
 	close(taskStream)
 
 	// write to dest
-	if err = os.WriteFile(outFile, resultBuf, 0o660); err != nil {
-		return err
+	if mi.Multifile {
+		var lengthWritten int
+		for _, file := range mi.Info.Files {
+			dirpath := filepath.Join(append([]string{outFile}, file.Path[:len(file.Path)-1]...)...)
+			if err := os.MkdirAll(dirpath, 0o755); err != nil {
+				return err
+			}
+
+			path := filepath.Join(dirpath, file.Path[len(file.Path)-1])
+
+			if err = os.WriteFile(path, resultBuf[lengthWritten:lengthWritten+file.Length], 0o660); err != nil {
+				return err
+			}
+
+			lengthWritten += file.Length
+		}
+
+	} else {
+		if err = os.WriteFile(outFile, resultBuf, 0o660); err != nil {
+			return err
+		}
 	}
 
 	return nil

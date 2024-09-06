@@ -13,16 +13,21 @@ import (
 	"github.com/kanowfy/btor/peers"
 )
 
-const MaxBlockLen = 16384 // 2^14
+const (
+	MaxBlockLen       = 16384 // 2^14
+	MaxPipelinedBlock = 5
+)
 
 // Client holds a connection with a peer
 type Client struct {
-	conn     net.Conn
-	peer     peers.Peer
-	infoHash []byte
-	peerID   []byte
-	bitfield message.Bitfield
-	logger   *slog.Logger
+	conn         net.Conn
+	peer         peers.Peer
+	infoHash     []byte
+	peerID       []byte
+	bitfield     message.Bitfield
+	recvBitfield bool
+	choke        bool
+	logger       *slog.Logger
 }
 
 type PieceTask struct {
@@ -34,6 +39,15 @@ type PieceTask struct {
 type PieceResult struct {
 	PieceTask
 	Data []byte
+}
+
+type pieceState struct {
+	index      int
+	client     *Client
+	requested  int
+	downloaded int
+	pipelined  int
+	buf        []byte
 }
 
 // New establish tcp connection with a peer and complete the handshake
@@ -55,13 +69,18 @@ func New(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte) (*Client
 		return nil, err
 	}
 
-	msg, err := readBitfield(conn)
+	msg, err := readFirstMsg(conn)
 	if err != nil {
-		logger.Error("failed to read bitfield message from peer", "error", err)
+		logger.Error("failed to read message from peer", "error", err)
 		return nil, err
 	}
 
-	bitfield := message.Bitfield(msg.Payload)
+	var bitfield message.Bitfield
+	var recvBitfield bool
+	if msg.ID == message.MessageBitfield {
+		bitfield = message.Bitfield(msg.Payload)
+		recvBitfield = true
+	}
 
 	return &Client{
 		conn,
@@ -69,11 +88,13 @@ func New(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte) (*Client
 		infoHash,
 		peerID,
 		bitfield,
+		recvBitfield,
+		false,
 		logger,
 	}, nil
 }
 
-func AttemptDownload(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte, taskStream chan PieceTask, resultStream chan<- PieceResult) {
+func StartDownloadClient(logger *slog.Logger, peer peers.Peer, infoHash, peerID []byte, taskStream chan PieceTask, resultStream chan<- PieceResult) {
 	c, err := New(logger, peer, infoHash, peerID)
 	if err != nil {
 		logger.Error(err.Error())
@@ -85,34 +106,29 @@ func AttemptDownload(logger *slog.Logger, peer peers.Peer, infoHash, peerID []by
 		return
 	}
 
-	// read unchoke
-	if err := c.readUnchoke(); err != nil {
-		c.logger.Error("failed to read unchoke message from peer", "error", err)
-		return
+	// read unchoke if haven't
+	if c.recvBitfield {
+		if err := c.readUnchoke(); err != nil {
+			c.logger.Error("failed to read unchoke message from peer", "error", err)
+			return
+		}
 	}
 
 	for pt := range taskStream {
-		if !c.bitfield.HasPiece(pt.Index) {
-			// put task back to queue
-			taskStream <- pt
-			continue
+		if c.recvBitfield {
+			if !c.bitfield.HasPiece(pt.Index) {
+				// put task back to queue
+				taskStream <- pt
+				continue
+			}
 		}
 
-		c.logger.Info("requesting piece", slog.Int("piece index", pt.Index))
-		// send requests
-		if err := c.sendRequests(pt.Index, pt.Length); err != nil {
-			c.logger.Error("failed to send requests message to peer", "error", err)
+		c.logger.Info("downloading piece", slog.Int("index", pt.Index))
+		piece, err := downloadPiece(c, pt)
+		if err != nil {
+			c.logger.Info("could not download piece", slog.Int("index", pt.Index), "error", err)
 			taskStream <- pt
 			return
-		}
-
-		c.logger.Info("downloading piece", slog.Int("piece index", pt.Index))
-		// read piece
-		piece, err := c.readPiece(pt.Index, pt.Length)
-		if err != nil {
-			c.logger.Error("failed to read piece message from peer", "error", err)
-			taskStream <- pt
-			continue
 		}
 
 		// check hash
@@ -123,11 +139,80 @@ func AttemptDownload(logger *slog.Logger, peer peers.Peer, infoHash, peerID []by
 		}
 
 		c.logger.Info("piece downloaded", slog.Int("piece index", pt.Index))
+		c.sendHave(pt.Index)
 		resultStream <- PieceResult{
 			PieceTask: pt,
 			Data:      piece,
 		}
 	}
+}
+
+func downloadPiece(client *Client, pt PieceTask) ([]byte, error) {
+	state := pieceState{
+		index:  pt.Index,
+		client: client,
+		buf:    make([]byte, pt.Length),
+	}
+
+	for state.downloaded < pt.Length {
+		if !state.client.choke {
+			for state.pipelined < MaxPipelinedBlock && state.requested < pt.Length {
+
+				blockLen := MaxBlockLen
+				if pt.Length-state.requested < MaxBlockLen {
+					blockLen = pt.Length - state.requested
+				}
+
+				if err := state.client.sendRequest(pt.Index, state.requested, blockLen); err != nil {
+					return nil, err
+				}
+				state.requested += blockLen
+				state.pipelined++
+			}
+		}
+
+		if err := state.readMessage(); err != nil {
+			return nil, err
+		}
+	}
+
+	return state.buf, nil
+}
+
+func (state *pieceState) readMessage() error {
+	msg, err := message.Read(state.client.conn)
+	if err != nil {
+		return err
+	}
+
+	if msg == nil {
+		return nil
+	}
+
+	switch msg.ID {
+	case message.MessageChoke:
+		state.client.choke = true
+	case message.MessageUnchoke:
+		state.client.choke = false
+	case message.MessageHave:
+		index, err := message.ParseHave(msg)
+		if err != nil {
+			return err
+		}
+
+		state.client.bitfield.SetPieceIndex(index)
+		// to be implemented
+	case message.MessagePiece:
+		got, err := message.ParsePiece(msg, state.buf, state.index)
+		if err != nil {
+			return err
+		}
+
+		state.downloaded += got
+		state.pipelined--
+	}
+
+	return nil
 }
 
 func CalculatePieceLength(pieceIndex, maxPieceLen, fileLen int) int {
@@ -138,18 +223,14 @@ func CalculatePieceLength(pieceIndex, maxPieceLen, fileLen int) int {
 	return fileLen % maxPieceLen
 }
 
-func readBitfield(conn net.Conn) (*message.Message, error) {
+func readFirstMsg(conn net.Conn) (*message.Message, error) {
 	msg, err := message.Read(conn)
 	if err != nil {
 		return nil, err
 	}
 
 	if msg == nil {
-		return nil, fmt.Errorf("expected bitfield message but got nothing")
-	}
-
-	if msg.ID != message.MessageBitfield {
-		return nil, fmt.Errorf("expected bitfield message but got message with ID %d", msg.ID)
+		return nil, fmt.Errorf("expected message but got nothing")
 	}
 
 	return msg, nil
@@ -178,49 +259,16 @@ func (c *Client) readUnchoke() error {
 	return nil
 }
 
-func (c *Client) sendRequests(pieceIndex, pieceLength int) error {
-	var lengthSent int
-
-	for lengthSent < pieceLength {
-		blockLen := MaxBlockLen
-		if pieceLength-lengthSent < MaxBlockLen {
-			blockLen = pieceLength - lengthSent
-		}
-		msg := message.NewRequest(pieceIndex, lengthSent, blockLen)
-		_, err := c.conn.Write(msg.Serialize())
-		if err != nil {
-			return err
-		}
-		lengthSent += blockLen
-	}
-
-	return nil
+func (c *Client) sendRequest(pieceIndex, offset, pieceLength int) error {
+	msg := message.NewRequest(pieceIndex, offset, pieceLength)
+	_, err := c.conn.Write(msg.Serialize())
+	return err
 }
 
-func (c *Client) readPiece(pieceIndex, pieceLength int) ([]byte, error) {
-	buf := make([]byte, pieceLength)
-	var lengthRead int
-	for {
-		msg, err := message.Read(c.conn)
-		if err != nil {
-			return nil, err
-		}
-
-		if msg.ID != message.MessagePiece {
-			continue
-		}
-
-		rlen, err := message.ParsePiece(msg, buf, pieceIndex)
-		if err != nil {
-			return nil, err
-		}
-
-		lengthRead += rlen
-
-		if lengthRead >= pieceLength {
-			return buf, nil
-		}
-	}
+func (c *Client) sendHave(pieceIndex int) error {
+	msg := message.NewHave(pieceIndex)
+	_, err := c.conn.Write(msg.Serialize())
+	return err
 }
 
 func matchPieceHash(piece []byte, hash []byte) error {
