@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"io"
 	"log/slog"
 	"os"
 
@@ -16,16 +15,13 @@ func Execute() {
 
 	root.AddCommand(decodeCmd(), infoCmd(), peersCmd(), handshakeCmd(), downloadFileCmd())
 
-	var verbose bool
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if err := setupLogger(verbose); err != nil {
+		if err := setupLogger(); err != nil {
 			return err
 		}
 
 		return nil
 	}
-
-	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "whether to send logs to stdout")
 
 	root.Example = `Download from example.torrent file in home directory and save to example.txt file in the Download directory
 
@@ -33,20 +29,12 @@ func Execute() {
 	root.Execute()
 }
 
-func setupLogger(verbose bool) error {
-	var out io.Writer
-
-	fileout := &lumberjack.Logger{
+func setupLogger() error {
+	out := &lumberjack.Logger{
 		Filename:   os.ExpandEnv("$HOME/.local/share/btor/btor.log"),
 		MaxSize:    100,
 		MaxBackups: 2,
 		MaxAge:     28,
-	}
-
-	if verbose {
-		out = io.MultiWriter(os.Stdout, fileout)
-	} else {
-		out = fileout
 	}
 
 	logger := slog.New(
