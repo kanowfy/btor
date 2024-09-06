@@ -13,3 +13,12 @@ func (bf Bitfield) HasPiece(pieceIndex int) bool {
 
 	return bf[byteIdx]&(1<<bitIdx) != 0
 }
+
+func (bf Bitfield) SetPieceIndex(pieceIndex int) {
+	byteIdx := pieceIndex / 8
+	if byteIdx < 0 || byteIdx >= len(bf) {
+		return
+	}
+
+	bf[byteIdx] |= 1 << (7 - uint(pieceIndex%8))
+}
