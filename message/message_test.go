@@ -220,3 +220,65 @@ func TestParsePiece(t *testing.T) {
 		})
 	}
 }
+
+func TestParseHave(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		input  *message.Message
+		output int
+		fails  bool
+	}{
+		{
+			name: "correctly parses have msg",
+			input: &message.Message{
+				ID: message.MessageHave,
+				Payload: []byte{
+					0, 0, 0, 1,
+				},
+			},
+			output: 1,
+			fails:  false,
+		},
+		{
+			name: "error on invalid msg id",
+			input: &message.Message{
+				ID:      message.MessageBitfield,
+				Payload: []byte{},
+			},
+			output: 0,
+			fails:  true,
+		},
+		{
+			name: "error on invalid length payload",
+			input: &message.Message{
+				ID: message.MessageBitfield,
+				Payload: []byte{
+					1, 0, 0, 0, 0,
+				},
+			},
+			output: 0,
+			fails:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			index, err := message.ParseHave(tc.input)
+			if tc.fails {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if index != tc.output {
+					t.Errorf("want %d, got %d", tc.output, index)
+				}
+			}
+		})
+	}
+}
