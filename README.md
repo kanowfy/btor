@@ -26,9 +26,13 @@ btor -h
 btor peers -h
 ```
 
-### Current limitations
-- Only support HTTP trackers
-- Only support single-file torrents
+### Support
+- Download from torrent file
+- HTTP trackers
+- Single file and multifile torrent
+
+### Limitations
+- Does not support UDP tracker and DHT
 
 ## License
 [MIT LICENSE](LICENSE)
