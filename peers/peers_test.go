@@ -22,7 +22,7 @@ func TestFetch(t *testing.T) {
 		fails    bool
 	}{
 		{
-			name:     "correctly fetch and decode peers",
+			name:     "correctly fetch and decode peers with regular presentation",
 			response: []byte("d8:intervali5e5:peersld7:peer id20:123456789012345678902:ip7:1.2.3.44:porti12345eed7:peer id20:001122334455667788992:ip7:5.6.7.84:porti56789eeee"),
 			output: []peers.Peer{
 				{
@@ -32,6 +32,21 @@ func TestFetch(t *testing.T) {
 				},
 				{
 					ID:   "00112233445566778899",
+					IP:   "5.6.7.8",
+					Port: 56789,
+				},
+			},
+			fails: false,
+		},
+		{
+			name:     "correctly fetch and decode peers with compact representation",
+			response: []byte{100, 56, 58, 105, 110, 116, 101, 114, 118, 97, 108, 105, 53, 101, 53, 58, 112, 101, 101, 114, 115, 49, 50, 58, 1, 2, 3, 4, 48, 57, 5, 6, 7, 8, 221, 213, 101},
+			output: []peers.Peer{
+				{
+					IP:   "1.2.3.4",
+					Port: 12345,
+				},
+				{
 					IP:   "5.6.7.8",
 					Port: 56789,
 				},
