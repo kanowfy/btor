@@ -1,24 +1,20 @@
 package peers
 
 import (
+	"encoding/binary"
 	"fmt"
-	"io"
+	"net"
 	"net/http"
 	"strconv"
 
-	"github.com/kanowfy/btor/bencode"
+	"github.com/jackpal/bencode-go"
 	"github.com/mitchellh/mapstructure"
 )
 
 type Peer struct {
 	ID   string `mapstructure:"peer id"`
 	IP   string `mapstructure:"ip"`
-	Port int    `mapstructure:"port"`
-}
-
-type trackerResponse struct {
-	Interval int    `mapstructure:"interval"`
-	Peers    []Peer `mapstructure:"peers"`
+	Port uint16 `mapstructure:"port"`
 }
 
 // Fetch sends a GET request to a tracker endpoint, parses the response and returns the peers
@@ -36,7 +32,7 @@ func Fetch(trackerUrl string, infoHash []byte, length int, peerID []byte) ([]Pee
 	q.Add("uploaded", "0")
 	q.Add("downloaded", "0")
 	q.Add("left", strconv.Itoa(length))
-	q.Add("compact", "0") // TODO: change to compact peers representation
+	q.Add("compact", "1")
 
 	req.URL.RawQuery = q.Encode()
 
@@ -46,20 +42,38 @@ func Fetch(trackerUrl string, infoHash []byte, length int, peerID []byte) ([]Pee
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	decoded, err := bencode.Decode(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	decoded, err := bencode.Unmarshal(string(body))
-	if err != nil {
-		return nil, err
+	var peers []Peer
+
+	// some tracker will not return compact peer representation, this will support both compact and non-compact ones
+	peerResp := decoded.(map[string]interface{})["peers"]
+	switch v := peerResp.(type) {
+	case string:
+		peers, err = parseCompactPeers([]byte(v))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse peers: %v", err)
+		}
+	case []interface{}:
+		mapstructure.Decode(v, &peers)
+	default:
+		return nil, fmt.Errorf("invalid peer representation")
 	}
 
-	var tr trackerResponse
-	if err = mapstructure.Decode(decoded, &tr); err != nil {
-		return nil, fmt.Errorf("invalid tracker response: %+v", decoded)
-	}
+	return peers, nil
+}
 
-	return tr.Peers, nil
+func parseCompactPeers(peerString []byte) ([]Peer, error) {
+	numPeers := len(peerString) / 6
+	peers := make([]Peer, numPeers)
+	for i := range numPeers {
+		peers[i] = Peer{
+			IP:   net.IP(peerString[i*6 : i*6+4]).String(),
+			Port: binary.BigEndian.Uint16(peerString[i*6+4 : i*6+6]),
+		}
+	}
+	return peers, nil
 }
