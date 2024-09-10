@@ -1,16 +1,21 @@
 package cmd
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+const AppName = "btor"
+
 func Execute() {
 	var root = &cobra.Command{
-		Use: "btor",
+		Use: AppName,
 	}
 
 	root.AddCommand(decodeCmd(), infoCmd(), peersCmd(), handshakeCmd(), downloadFileCmd())
@@ -30,8 +35,14 @@ func Execute() {
 }
 
 func setupLogger() error {
+	logPath := getLogPath()
+
+	if err := os.MkdirAll(filepath.Dir(logPath), os.ModePerm); err != nil {
+		return err
+	}
+
 	out := &lumberjack.Logger{
-		Filename:   os.ExpandEnv("$HOME/.local/share/btor/btor.log"),
+		Filename:   logPath,
 		MaxSize:    100,
 		MaxBackups: 2,
 		MaxAge:     28,
@@ -46,4 +57,20 @@ func setupLogger() error {
 
 	slog.SetDefault(logger)
 	return nil
+}
+
+func getLogPath() string {
+	homeDir, _ := os.UserHomeDir()
+	logfile := fmt.Sprintf("%s.log", AppName)
+
+	switch runtime.GOOS {
+	case "linux":
+		return filepath.Join(homeDir, ".local", "share", AppName, logfile)
+	case "windows":
+		return filepath.Join(homeDir, "AppData", "Local", AppName, logfile)
+	case "darwin":
+		return filepath.Join(homeDir, "Library", "Logs", AppName, logfile)
+	default:
+		return filepath.Join(homeDir, AppName, logfile)
+	}
 }
